@@ -661,36 +661,164 @@ function handleRequest(e) {
       var transactions = payload.transactions || [];
       var payments = payload.payments || [];
       
-      // Islemleri Yaz
-      txSheet.clear();
-      // Orijinal kolon isimleriyle yazarak kullanıcının kopyalamasını kolaylaştırın (Türkçe kolon isimlerine uyumlu!)
-      txSheet.appendRow(["id", "Tarih", "Tür", "Katagori", "Alt katagori", "Tutar", "Açıklama"]);
-      transactions.forEach(function(tx) {
-        txSheet.appendRow([
-          tx.id, 
-          tx.tarih, 
-          tx.tur, 
-          tx.kategori, 
-          tx.altKategori || 'Genel', 
-          tx.tutar, 
-          tx.aciklama || ''
-        ]);
-      });
-      
-      // Odemeleri Yaz
-      if (paySheet) {
-        paySheet.clear();
-        paySheet.appendRow(["id", "Başlık", "Tutar", "Son Ödeme Tarihi", "Kategori", "Durum"]);
-        payments.forEach(function(p) {
-          paySheet.appendRow([
-            p.id, 
-            p.baslik, 
-            p.tutar, 
-            p.sonOdemeTarihi, 
-            p.kategori, 
-            p.durum || 'Bekliyor'
+      // --- İŞLEMLERİ YAZILACAK ---
+      var txRows = txSheet.getDataRange().getValues();
+      var txHeaderRowIdx = -1;
+      for (var rowIdx = 0; rowIdx < Math.min(txRows.length, 10); rowIdx++) {
+        var rowValues = txRows[rowIdx] || [];
+        var rowStr = rowValues.join(" ").toLowerCase();
+        
+        var matchCount = 0;
+        if (rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1 || rowStr.indexOf("gun") !== -1) matchCount++;
+        if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1 || rowStr.indexOf("fiyat") !== -1) matchCount++;
+        if (rowStr.indexOf("tur") !== -1 || rowStr.indexOf("tür") !== -1 || rowStr.indexOf("type") !== -1) matchCount++;
+        if (rowStr.indexOf("kategori") !== -1 || rowStr.indexOf("category") !== -1 || rowStr.indexOf("katagori") !== -1) matchCount++;
+        if (rowStr.indexOf("id") !== -1) matchCount++;
+        
+        if (matchCount >= 2) {
+          txHeaderRowIdx = rowIdx;
+          break;
+        }
+      }
+
+      var txHeaders;
+      var startRow;
+      var txOutput2D = [];
+
+      if (txHeaderRowIdx !== -1) {
+        txHeaders = txRows[txHeaderRowIdx];
+        startRow = txHeaderRowIdx + 2; // İlk veri satırının 1 tabanlı indeksi
+
+        var idCol = findColumnIndex(txHeaders, ["id", "islemid", "transid"]);
+        var tarihCol = findColumnIndex(txHeaders, ["tarih", "date", "gun"]);
+        var turCol = findColumnIndex(txHeaders, ["tur", "tür", "type"]);
+        var katCol = findColumnIndex(txHeaders, ["kategori", "katagori", "category"]);
+        var altKatCol = findColumnIndex(txHeaders, ["altkategori", "altkatagori", "subcategory"]);
+        var tutarCol = findColumnIndex(txHeaders, ["tutar", "amount", "fiyat"]);
+        var aciklamaCol = findColumnIndex(txHeaders, ["aciklama", "açıklama", "acıklama", "description", "not"]);
+
+        transactions.forEach(function(tx) {
+          var newRow = new Array(txHeaders.length);
+          for (var c = 0; c < txHeaders.length; c++) newRow[c] = "";
+          
+          if (idCol !== -1) newRow[idCol] = tx.id;
+          if (tarihCol !== -1) newRow[tarihCol] = tx.tarih;
+          if (turCol !== -1) newRow[turCol] = tx.tur;
+          if (katCol !== -1) newRow[katCol] = tx.kategori;
+          if (altKatCol !== -1) newRow[altKatCol] = tx.altKategori || 'Genel';
+          if (tutarCol !== -1) newRow[tutarCol] = tx.tutar;
+          if (aciklamaCol !== -1) newRow[aciklamaCol] = tx.aciklama || '';
+          
+          txOutput2D.push(newRow);
+        });
+
+        // Sadece veri satırlarının içeriğini temizle (biçimlendirmeleri silme!)
+        var lastTxRow = txSheet.getLastRow();
+        if (lastTxRow >= startRow) {
+          txSheet.getRange(startRow, 1, lastTxRow - startRow + 1, txHeaders.length).clearContent();
+        }
+        // Verileri tek seferde toplu yaz
+        if (txOutput2D.length > 0) {
+          txSheet.getRange(startRow, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
+        }
+      } else {
+        // Yedek durum: Başlık bulunamadıysa sıfırdan oluştur
+        txHeaders = ["id", "Tarih", "Tür", "Katagori", "Alt katagori", "Tutar", "Açıklama"];
+        txSheet.clearContents();
+        txSheet.getRange(1, 1, 1, txHeaders.length).setValues([txHeaders]);
+        
+        transactions.forEach(function(tx) {
+          txOutput2D.push([
+            tx.id,
+            tx.tarih,
+            tx.tur,
+            tx.kategori,
+            tx.altKategori || 'Genel',
+            tx.tutar,
+            tx.aciklama || ''
           ]);
         });
+        if (txOutput2D.length > 0) {
+          txSheet.getRange(2, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
+        }
+      }
+
+      // --- ÖDEMELERİ YAZILACAK ---
+      if (paySheet) {
+        var payRows = paySheet.getDataRange().getValues();
+        var payHeaderRowIdx = -1;
+        for (var rowIdx = 0; rowIdx < Math.min(payRows.length, 10); rowIdx++) {
+          var rowValues = payRows[rowIdx] || [];
+          var rowStr = rowValues.join(" ").toLowerCase();
+          
+          var matchCount = 0;
+          if (rowStr.indexOf("baslik") !== -1 || rowStr.indexOf("başlık") !== -1 || rowStr.indexOf("title") !== -1) matchCount++;
+          if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1) matchCount++;
+          if (rowStr.indexOf("sonodemetarihi") !== -1 || rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1) matchCount++;
+          if (rowStr.indexOf("durum") !== -1 || rowStr.indexOf("status") !== -1) matchCount++;
+          if (rowStr.indexOf("id") !== -1) matchCount++;
+          
+          if (matchCount >= 2) {
+            payHeaderRowIdx = rowIdx;
+            break;
+          }
+        }
+
+        var payHeaders;
+        var pStartRow;
+        var payOutput2D = [];
+
+        if (payHeaderRowIdx !== -1) {
+          payHeaders = payRows[payHeaderRowIdx];
+          pStartRow = payHeaderRowIdx + 2;
+
+          var pIdCol = findColumnIndex(payHeaders, ["id", "odemeid"]);
+          var pBaslikCol = findColumnIndex(payHeaders, ["baslik", "başlık", "title", "aciklama", "isim"]);
+          var pTutarCol = findColumnIndex(payHeaders, ["tutar", "amount"]);
+          var pTarihCol = findColumnIndex(payHeaders, ["sonodemetarihi", "tarih", "date"]);
+          var pKateCol = findColumnIndex(payHeaders, ["kategori", "category"]);
+          var pDurumCol = findColumnIndex(payHeaders, ["durum", "status"]);
+
+          payments.forEach(function(p) {
+            var newRow = new Array(payHeaders.length);
+            for (var c = 0; c < payHeaders.length; c++) newRow[c] = "";
+
+            if (pIdCol !== -1) newRow[pIdCol] = p.id;
+            if (pBaslikCol !== -1) newRow[pBaslikCol] = p.baslik;
+            if (pTutarCol !== -1) newRow[pTutarCol] = p.tutar;
+            if (pTarihCol !== -1) newRow[pTarihCol] = p.sonOdemeTarihi;
+            if (pKateCol !== -1) newRow[pKateCol] = p.kategori;
+            if (pDurumCol !== -1) newRow[pDurumCol] = p.durum || 'Bekliyor';
+
+            payOutput2D.push(newRow);
+          });
+
+          var lastPayRow = paySheet.getLastRow();
+          if (lastPayRow >= pStartRow) {
+            paySheet.getRange(pStartRow, 1, lastPayRow - pStartRow + 1, payHeaders.length).clearContent();
+          }
+          if (payOutput2D.length > 0) {
+            paySheet.getRange(pStartRow, 1, payOutput2D.length, payHeaders.length).setValues(payOutput2D);
+          }
+        } else {
+          payHeaders = ["id", "Başlık", "Tutar", "Son Ödeme Tarihi", "Kategori", "Durum"];
+          paySheet.clearContents();
+          paySheet.getRange(1, 1, 1, payHeaders.length).setValues([payHeaders]);
+
+          payments.forEach(function(p) {
+            payOutput2D.push([
+              p.id,
+              p.baslik,
+              p.tutar,
+              p.sonOdemeTarihi,
+              p.kategori,
+              p.durum || 'Bekliyor'
+            ]);
+          });
+          if (payOutput2D.length > 0) {
+            paySheet.getRange(2, 1, payOutput2D.length, payHeaders.length).setValues(payOutput2D);
+          }
+        }
       }
       
       responseData = { success: true, message: "Senkronizasyon Başarılı! Tüm veriler Google Sheets'e işlendi." };

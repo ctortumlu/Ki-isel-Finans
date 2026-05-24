@@ -32,6 +32,8 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [payments, setPayments] = useState<RecurringPayment[]>([]);
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // Load state on mount
   useEffect(() => {
     const localTxns = loadTransactions();
@@ -40,6 +42,7 @@ export default function App() {
     setPayments(localPmts);
 
     if (isSyncEnabled() && getAutoSyncOnLoad()) {
+      setIsSyncing(true);
       syncGetAllData().then((res) => {
         if (res.success && res.transactions && res.payments) {
           setTransactions(res.transactions);
@@ -51,9 +54,36 @@ export default function App() {
         }
       }).catch(err => {
         console.warn('Otomatik başlangıç senkronizasyonu hatası:', err);
+      }).finally(() => {
+        setIsSyncing(false);
       });
     }
   }, []);
+
+  const handleSync = async () => {
+    if (!isSyncEnabled()) {
+      alert("Lütfen önce Ayarlar menüsünden Google Sheets URL ve Bulut Eşitlemeyi etkinleştirin.");
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await syncGetAllData();
+      if (res.success && res.transactions && res.payments) {
+        setTransactions(res.transactions);
+        setPayments(res.payments);
+        saveTransactions(res.transactions);
+        savePayments(res.payments);
+        setLastSyncTime(new Date().toLocaleString('tr-TR'));
+        alert("Eşitleme başarıyla tamamlandı! Buluttaki güncel verileriniz yüklendi.");
+      } else {
+        alert("Eşitleme başarısız: " + (res.error || "Bilinmeyen hata"));
+      }
+    } catch (e: any) {
+      alert("Bağlantı hatası: " + e.toString());
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Soft background sync pusher
   const triggerBackgroundSync = (updatedTxns: Transaction[], updatedPmts: RecurringPayment[]) => {
@@ -134,6 +164,8 @@ export default function App() {
             transactions={transactions}
             payments={payments}
             onNavigate={(tab) => setActiveTab(tab)}
+            onSync={handleSync}
+            isSyncing={isSyncing}
           />
         );
       case 'kayit':

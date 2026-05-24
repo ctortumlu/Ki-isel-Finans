@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Transaction, RecurringPayment } from '../types';
 import { getDaysRemaining } from '../db';
-import { TrendingUp, TrendingDown, Wallet, Calendar, ArrowRight, ArrowUpRight, Bell } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Calendar, ArrowRight, ArrowUpRight, Bell, RefreshCw } from 'lucide-react';
 import { getCategoryEmoji } from '../utils/emoji';
 
 interface DashboardProps {
@@ -10,9 +10,18 @@ interface DashboardProps {
   payments: RecurringPayment[];
   onNavigate: (tabId: string) => void;
   userName?: string;
+  onSync?: () => Promise<void>;
+  isSyncing?: boolean;
 }
 
-export default function Dashboard({ transactions, payments, onNavigate, userName = "Cavit" }: DashboardProps) {
+export default function Dashboard({ 
+  transactions, 
+  payments, 
+  onNavigate, 
+  userName = "Cavit",
+  onSync,
+  isSyncing = false
+}: DashboardProps) {
   // Compute aggregates
   const totalIncome = transactions
     .filter((t) => t.tur === 'Gelir')
@@ -54,18 +63,35 @@ export default function Dashboard({ transactions, payments, onNavigate, userName
           <h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">Merhaba, {userName}</h2>
         </div>
         
-        {/* Alerts Badge */}
-        <button 
-          onClick={() => onNavigate('takip')}
-          className="relative p-2.5 bg-white rounded-full text-slate-600 shadow-xs hover:bg-slate-50 transition-colors border border-slate-100/50"
-        >
-          <Bell className="w-5 h-5" />
-          {(overdueCount + dueTodayCount + criticalCount) > 0 && (
-            <span className="absolute top-0 right-0 w-4 h-4 bg-rose-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center animate-pulse">
-              {overdueCount + dueTodayCount + criticalCount}
-            </span>
+        {/* Action Buttons: Sync & Alert */}
+        <div className="flex items-center gap-2">
+          {/* Cloud Sync Button */}
+          {onSync && (
+            <button
+              onClick={onSync}
+              disabled={isSyncing}
+              title="Bulut Verilerini Güncelle"
+              className={`p-2.5 bg-white rounded-full text-slate-600 shadow-xs border border-slate-100/50 hover:bg-slate-50 transition-all ${
+                isSyncing ? 'opacity-80 scale-95' : 'active:scale-95'
+              }`}
+            >
+              <RefreshCw className={`w-4.5 h-4.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-600'}`} />
+            </button>
           )}
-        </button>
+
+          {/* Alerts Badge */}
+          <button 
+            onClick={() => onNavigate('takip')}
+            className="relative p-2.5 bg-white rounded-full text-slate-600 shadow-xs hover:bg-slate-50 transition-colors border border-slate-100/50 active:scale-95"
+          >
+            <Bell className="w-5 h-5" />
+            {(overdueCount + dueTodayCount + criticalCount) > 0 && (
+              <span className="absolute top-0 right-0 w-4 h-4 bg-rose-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center animate-pulse">
+                {overdueCount + dueTodayCount + criticalCount}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Net Balance Master Card */}

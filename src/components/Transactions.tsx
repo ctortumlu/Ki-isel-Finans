@@ -21,6 +21,7 @@ export default function Transactions({
   const [filterType, setFilterType] = useState<'Tümü' | 'Gelir' | 'Gider'>('Tümü');
   const [selectedCategory, setSelectedCategory] = useState('Tümü');
   const [customCats, setCustomCats] = useState<SheetCategory[]>([]);
+  const [sortOrder, setSortOrder] = useState<'yeni' | 'eski' | 'yuksek' | 'dusuk'>('yeni');
   
   // Date range state
   const [startDate, setStartDate] = useState('');
@@ -65,21 +66,41 @@ export default function Transactions({
     }
   }, [categories, selectedCategory]);
 
-  const filteredTransactions = transactions.filter((t) => {
-    const matchesSearch =
-      t.aciklama.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.kategori.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.altKategori && t.altKategori.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesType = filterType === 'Tümü' || t.tur === filterType;
-    const matchesCategory = selectedCategory === 'Tümü' || t.kategori === selectedCategory;
+  const filteredTransactions = useMemo(() => {
+    const list = transactions.filter((t) => {
+      const matchesSearch =
+        t.aciklama.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.kategori.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (t.altKategori && t.altKategori.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      const matchesType = filterType === 'Tümü' || t.tur === filterType;
+      const matchesCategory = selectedCategory === 'Tümü' || t.kategori === selectedCategory;
 
-    // Date range validation
-    const matchesStart = !startDate || t.tarih >= startDate;
-    const matchesEnd = !endDate || t.tarih <= endDate;
+      // Date range validation
+      const matchesStart = !startDate || t.tarih >= startDate;
+      const matchesEnd = !endDate || t.tarih <= endDate;
 
-    return matchesSearch && matchesType && matchesCategory && matchesStart && matchesEnd;
-  });
+      return matchesSearch && matchesType && matchesCategory && matchesStart && matchesEnd;
+    });
+
+    return [...list].sort((a, b) => {
+      if (sortOrder === 'yeni') {
+        const dateCompare = b.tarih.localeCompare(a.tarih);
+        return dateCompare !== 0 ? dateCompare : b.id.localeCompare(a.id);
+      }
+      if (sortOrder === 'eski') {
+        const dateCompare = a.tarih.localeCompare(b.tarih);
+        return dateCompare !== 0 ? dateCompare : a.id.localeCompare(b.id);
+      }
+      if (sortOrder === 'yuksek') {
+        return b.tutar - a.tutar;
+      }
+      if (sortOrder === 'dusuk') {
+        return a.tutar - b.tutar;
+      }
+      return 0;
+    });
+  }, [transactions, searchTerm, filterType, selectedCategory, startDate, endDate, sortOrder]);
 
   const promptDeleteTransaction = (id: string, detail: string) => {
     setTargetIdToDelete(id);
@@ -208,9 +229,19 @@ export default function Transactions({
           <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
             Süzülen İşlemler ({filteredTransactions.length})
           </h4>
-          <span className="text-[10px] font-mono text-slate-500 bg-slate-100 rounded-md px-1.5 py-0.5 animate-pulse">
-            Sıralama: En Yeni İlk
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] font-bold text-slate-400 uppercase font-sans">Sıralama:</span>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as any)}
+              className="text-[10.5px] font-bold text-indigo-650 bg-indigo-50 border border-indigo-100 rounded-md py-1 px-1.5 outline-none font-sans cursor-pointer"
+            >
+              <option value="yeni">En Yeni İlk</option>
+              <option value="eski">En Eski İlk</option>
+              <option value="yuksek">Tutar: Azalan</option>
+              <option value="dusuk">Tutar: Artan</option>
+            </select>
+          </div>
         </div>
 
         <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-0.5 scrollbar-thin">
