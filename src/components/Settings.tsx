@@ -530,6 +530,12 @@ function handleRequest(e) {
       if (str.indexOf('.') !== -1 && str.indexOf(',') !== -1) {
         str = str.replace(/\\./g, '').replace(/,/g, '.');
       } else if (str.indexOf(',') !== -1) {
+        str = str.replace(/,/g, '.');
+      }
+      var num = parseFloat(str);
+      return isNaN(num) ? 0 : num;
+    }
+
     // 1. VERİLERİ BULUTTAN ÇEK (GET ALL DATA)
     if (action === "getAllData") {
       var txRows = txSheet.getDataRange().getValues();
