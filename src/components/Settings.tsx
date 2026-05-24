@@ -541,7 +541,7 @@ function handleRequest(e) {
       var txRows = txSheet.getDataRange().getValues();
       
       // Tablo başlığı hangi satırda bulunuyor, otomatik tespit et! (Vercel/Sheets tablolarındaki otomatik eklenen 1. sütun satırlarını atlamak için)
-      var headerRowIdx = 0;
+      var headerRowIdx = -1;
       for (var rowIdx = 0; rowIdx < Math.min(txRows.length, 10); rowIdx++) {
         var rowValues = txRows[rowIdx] || [];
         var rowStr = rowValues.join(" ").toLowerCase();
@@ -558,6 +558,20 @@ function handleRequest(e) {
           break;
         }
       }
+
+      // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - İŞLEMLER TABLOSU:
+      // Eğer başlık satırı Row 2 veya sonrasında bulunmuşsa (yani ilk satırda Google Sheets tarafından otomatik eklenen "1. sütun" vb. bozuk başlıklar varsa),
+      // ilk satırı silelim ki gerçek başlıklarımız Row 1'e yerleşsin ve Excel/Sheets süzgeçleri düzgün çalışsın!
+      if (headerRowIdx > 0) {
+        txSheet.deleteRow(1);
+        Utilities.sleep(100);
+        txRows = txSheet.getDataRange().getValues();
+        headerRowIdx = headerRowIdx - 1;
+      }
+      if (headerRowIdx === -1) {
+        headerRowIdx = 0;
+      }
+
       var txHeaders = txRows[headerRowIdx] || [];
       
       // Kolon indislerini bulalım
@@ -605,7 +619,7 @@ function handleRequest(e) {
         var payRows = paySheet.getDataRange().getValues();
         
         // Ödemeler tablosunda başlık satırını otomatik tespit et
-        var payHeaderRowIdx = 0;
+        var payHeaderRowIdx = -1;
         for (var rowIdx = 0; rowIdx < Math.min(payRows.length, 10); rowIdx++) {
           var rowValues = payRows[rowIdx] || [];
           var rowStr = rowValues.join(" ").toLowerCase();
@@ -622,6 +636,18 @@ function handleRequest(e) {
             break;
           }
         }
+
+        // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - ÖDEMELER TABLOSU:
+        if (payHeaderRowIdx > 0) {
+          paySheet.deleteRow(1);
+          Utilities.sleep(100);
+          payRows = paySheet.getDataRange().getValues();
+          payHeaderRowIdx = payHeaderRowIdx - 1;
+        }
+        if (payHeaderRowIdx === -1) {
+          payHeaderRowIdx = 0;
+        }
+
         var payHeaders = payRows[payHeaderRowIdx] || [];
         
         var pIdColIdx = findColumnIndex(payHeaders, ["id", "odemeid"]);
@@ -685,6 +711,14 @@ function handleRequest(e) {
           txHeaderRowIdx = rowIdx;
           break;
         }
+      }
+
+      // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - İŞLEMLER TABLOSU KAYDETME:
+      if (txHeaderRowIdx > 0) {
+        txSheet.deleteRow(1);
+        Utilities.sleep(100);
+        txRows = txSheet.getDataRange().getValues();
+        txHeaderRowIdx = txHeaderRowIdx - 1;
       }
 
       var txHeaders;
@@ -768,6 +802,14 @@ function handleRequest(e) {
             payHeaderRowIdx = rowIdx;
             break;
           }
+        }
+
+        // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - ÖDEMELER TABLOSU KAYDETME:
+        if (payHeaderRowIdx > 0) {
+          paySheet.deleteRow(1);
+          Utilities.sleep(100);
+          payRows = paySheet.getDataRange().getValues();
+          payHeaderRowIdx = payHeaderRowIdx - 1;
         }
 
         var payHeaders;
