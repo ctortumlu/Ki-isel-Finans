@@ -1,0 +1,307 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Transaction, SheetCategory } from '../types';
+import { loadCustomCategories } from '../db';
+import { ArrowLeft, Search, Trash2, ArrowDownLeft, ArrowUpRight, Calendar } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
+import { getCategoryEmoji } from '../utils/emoji';
+
+interface TransactionsProps {
+  transactions: Transaction[];
+  onDeleteTransaction: (id: string) => void;
+  onNavigateHome: () => void;
+}
+
+export default function Transactions({
+  transactions,
+  onDeleteTransaction,
+  onNavigateHome,
+}: TransactionsProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'Tümü' | 'Gelir' | 'Gider'>('Tümü');
+  const [selectedCategory, setSelectedCategory] = useState('Tümü');
+  const [customCats, setCustomCats] = useState<SheetCategory[]>([]);
+  
+  // Date range state
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Confirmation Modal state
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [targetIdToDelete, setTargetIdToDelete] = useState<string | null>(null);
+  const [targetNameToDelete, setTargetNameToDelete] = useState('');
+
+  useEffect(() => {
+    try {
+      setCustomCats(loadCustomCategories());
+    } catch (e) {
+      console.error('Failed to load dynamic categories inside Transactions view:', e);
+    }
+  }, []);
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('tr-TR', {
+      style: 'currency',
+      currency: 'TRY',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(val);
+  };
+
+
+  // Compile matching category list dynamically from system configured categories
+  const categories = useMemo(() => {
+    const filteredCats = filterType === 'Tümü'
+      ? customCats
+      : customCats.filter(c => c.islem === filterType);
+    const uniqueFromSettings = Array.from(new Set(filteredCats.map(c => c.kategori)));
+    return ['Tümü', ...uniqueFromSettings];
+  }, [customCats, filterType]);
+
+  // Adjust selectedCategory tab if it is no longer within newly compiled options
+  useEffect(() => {
+    if (selectedCategory !== 'Tümü' && !categories.includes(selectedCategory)) {
+      setSelectedCategory('Tümü');
+    }
+  }, [categories, selectedCategory]);
+
+  const filteredTransactions = transactions.filter((t) => {
+    const matchesSearch =
+      t.aciklama.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.kategori.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.altKategori && t.altKategori.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesType = filterType === 'Tümü' || t.tur === filterType;
+    const matchesCategory = selectedCategory === 'Tümü' || t.kategori === selectedCategory;
+
+    // Date range validation
+    const matchesStart = !startDate || t.tarih >= startDate;
+    const matchesEnd = !endDate || t.tarih <= endDate;
+
+    return matchesSearch && matchesType && matchesCategory && matchesStart && matchesEnd;
+  });
+
+  const promptDeleteTransaction = (id: string, detail: string) => {
+    setTargetIdToDelete(id);
+    setTargetNameToDelete(detail);
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (targetIdToDelete) {
+      onDeleteTransaction(targetIdToDelete);
+    }
+    setIsConfirmOpen(false);
+    setTargetIdToDelete(null);
+    setTargetNameToDelete('');
+  };
+
+  return (
+    <div className="space-y-6 pb-6 select-text">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onNavigateHome}
+            className="p-2 bg-white rounded-full text-slate-600 hover:bg-slate-50 border border-slate-100/50"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h2 className="text-xl font-display font-bold text-slate-800">Tüm İşlemler</h2>
+            <p className="text-xs text-slate-500">Hesabınızın güncel gelir ve gider geçmişi</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Modern Filter Board container */}
+      <div className="bg-white border border-slate-200/80 p-4 rounded-[24px] shadow-sm space-y-4">
+        {/* Search Input */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Açıklama veya kategori ara..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold placeholder:font-normal"
+          />
+        </div>
+
+        {/* Type Filter Tabs (Gider, Gelir, Tümü) */}
+        <div className="grid grid-cols-3 gap-2">
+          {(['Tümü', 'Gelir', 'Gider'] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilterType(type)}
+              className={`py-2.5 px-3 text-xs rounded-xl border transition-all cursor-pointer font-sans ${
+                filterType === type
+                  ? type === 'Gelir'
+                    ? 'bg-emerald-600 border-emerald-600 text-white font-black shadow-xs'
+                    : type === 'Gider'
+                      ? 'bg-rose-500 border-rose-500 text-white font-black shadow-xs'
+                      : 'bg-slate-900 border-slate-900 text-white font-black shadow-xs'
+                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800 font-bold'
+              }`}
+            >
+              {type === 'Tümü' ? 'Tümü' : type === 'Gelir' ? '💰 Gelir' : '💸 Gider'}
+            </button>
+          ))}
+        </div>
+
+        {/* 2 Column filter panel for dropdown & date-range */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-1">
+          {/* Category Selector Dropdown */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest block font-sans">KATEGORİ SÜZGECİ</label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full p-2.5 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-550 text-slate-850 font-extrabold font-sans cursor-pointer"
+            >
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat === 'Tümü' ? '📦 Tüm Kategoriler' : `${getCategoryEmoji(cat)} ${cat}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Selector Range */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest block font-sans">TARİH ARALIĞI (İLK - SON)</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-slate-800 leading-none"
+              />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-slate-800 leading-none"
+              />
+            </div>
+            {(startDate || endDate) && (
+              <div className="flex justify-end pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                  className="text-[10px] font-bold text-rose-500 hover:text-rose-600 hover:underline font-sans cursor-pointer"
+                >
+                  Tarihleri Temizle
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Transactions List */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center px-1">
+          <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+            Süzülen İşlemler ({filteredTransactions.length})
+          </h4>
+          <span className="text-[10px] font-mono text-slate-500 bg-slate-100 rounded-md px-1.5 py-0.5 animate-pulse">
+            Sıralama: En Yeni İlk
+          </span>
+        </div>
+
+        <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-0.5 scrollbar-thin">
+          <AnimatePresence initial={false}>
+            {filteredTransactions.map((t) => {
+              const emoji = getCategoryEmoji(t.kategori);
+              const isGelir = t.tur === 'Gelir';
+              const trDateFormatted = t.tarih.split('-').reverse().join('.');
+
+              return (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  key={t.id}
+                  className="flex items-center justify-between p-3 bg-white rounded-2xl hover:border-indigo-400 hover:shadow-xxs border border-slate-300 transition-all duration-200 group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Rounded Image Frame container */}
+                    <div className="relative w-11 h-11 bg-slate-50 border border-slate-200 rounded-2xl shadow-2xs flex items-center justify-center shrink-0">
+                      <span className="text-xl select-none font-mono">{emoji}</span>
+                      
+                      {/* Corner signal type indicator */}
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full border-2 border-white flex items-center justify-center text-[7.5px] font-black text-white ${
+                        isGelir ? 'bg-emerald-500' : 'bg-rose-500'
+                      }`}>
+                        {isGelir ? '✓' : '•'}
+                      </span>
+                    </div>
+
+                    <div className="min-w-0">
+                      <h5 className="text-[12.5px] font-sans font-black text-slate-800 leading-snug truncate">
+                        {t.aciklama}
+                      </h5>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5 leading-none">
+                        <span className="text-[9.5px] text-slate-500 font-mono">{trDateFormatted}</span>
+                        <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                        <span className="text-[9.5px] text-indigo-650 bg-indigo-50 border border-indigo-100/50 font-black px-1.5 py-0.5 rounded-md font-sans leading-none block">
+                          {t.kategori}{t.altKategori ? ` › ${t.altKategori}` : ''}
+                        </span>
+                        {t.faturaFile && (
+                          <>
+                            <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                            <span className="text-[8.5px] bg-[#ebf5fb] text-[#2995ce] border border-[#cbe1ef] px-1.5 py-0.5 rounded-sm font-semibold tracking-wider font-sans animate-pulse">
+                              📎 BELGE
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Price block & Action button */}
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <span className={`text-[12.5px] font-mono font-black ${isGelir ? 'text-emerald-600' : 'text-slate-900'}`}>
+                      {isGelir ? '+' : '-'} {formatCurrency(t.tutar)}
+                    </span>
+                    
+                    <button
+                      onClick={() => promptDeleteTransaction(t.id, t.aciklama)}
+                      className="p-2 text-rose-500 bg-rose-50/70 hover:bg-rose-500 hover:text-white border border-rose-100 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
+                      title="İşlemi Sil"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+
+          {filteredTransactions.length === 0 && (
+            <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 text-slate-400">
+              <p className="text-xs font-semibold">Cihazınızda kayıtlı bu kriterlere uygun işlem bulunamadı.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Premium Confirm modal */}
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        title="İşlem Silme Onayı"
+        message={`"${targetNameToDelete}" isimli işlem kaydını kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+        confirmText="Evet, Sil"
+        cancelText="Vazgeç"
+        isDangerous={true}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setIsConfirmOpen(false)}
+      />
+    </div>
+  );
+}

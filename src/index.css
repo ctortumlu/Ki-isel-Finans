@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-pastel-blue: #d1e9f5;
+  --color-pastel-blue-dark: #a9d4eb;
+  --color-pastel-blue-light: #e6f3fa;
+  --color-pastel-bg: #f5f9fc;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f0f4f8;
+  color: #1e293b;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Rounded corners layout helpers */
+.mobile-card {
+  border-radius: 25px;
+  background-color: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(209, 233, 245, 0.4), 0 8px 10px -6px rgba(209, 233, 245, 0.3);
+}
+
+.tab-bar-shadow {
+  box-shadow: 0 -8px 20px -6px rgba(209, 233, 245, 0.3);
+}
