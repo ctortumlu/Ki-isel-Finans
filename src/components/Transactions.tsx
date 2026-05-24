@@ -175,13 +175,13 @@ export default function Transactions({
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-slate-800 leading-none"
+                className="w-full h-11 px-3 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
               />
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-slate-800 leading-none"
+                className="w-full h-11 px-3 text-xs bg-slate-50 border border-slate-250 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
               />
             </div>
             {(startDate || endDate) && (

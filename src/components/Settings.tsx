@@ -530,17 +530,29 @@ function handleRequest(e) {
       if (str.indexOf('.') !== -1 && str.indexOf(',') !== -1) {
         str = str.replace(/\\./g, '').replace(/,/g, '.');
       } else if (str.indexOf(',') !== -1) {
-        // sadece ondalık virgülü var (500,00 gibi)
-        str = str.replace(/,/g, '.');
-      }
-      var num = parseFloat(str);
-      return isNaN(num) ? 0 : num;
-    }
-
     // 1. VERİLERİ BULUTTAN ÇEK (GET ALL DATA)
     if (action === "getAllData") {
       var txRows = txSheet.getDataRange().getValues();
-      var txHeaders = txRows[0] || [];
+      
+      // Tablo başlığı hangi satırda bulunuyor, otomatik tespit et! (Vercel/Sheets tablolarındaki otomatik eklenen 1. sütun satırlarını atlamak için)
+      var headerRowIdx = 0;
+      for (var rowIdx = 0; rowIdx < Math.min(txRows.length, 10); rowIdx++) {
+        var rowValues = txRows[rowIdx] || [];
+        var rowStr = rowValues.join(" ").toLowerCase();
+        
+        var matchCount = 0;
+        if (rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1 || rowStr.indexOf("gun") !== -1) matchCount++;
+        if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1 || rowStr.indexOf("fiyat") !== -1) matchCount++;
+        if (rowStr.indexOf("tur") !== -1 || rowStr.indexOf("tür") !== -1 || rowStr.indexOf("type") !== -1) matchCount++;
+        if (rowStr.indexOf("kategori") !== -1 || rowStr.indexOf("category") !== -1 || rowStr.indexOf("katagori") !== -1) matchCount++;
+        if (rowStr.indexOf("id") !== -1) matchCount++;
+        
+        if (matchCount >= 2) {
+          headerRowIdx = rowIdx;
+          break;
+        }
+      }
+      var txHeaders = txRows[headerRowIdx] || [];
       
       // Kolon indislerini bulalım
       var idColIdx = findColumnIndex(txHeaders, ["id", "islemid", "transid"]);
@@ -552,7 +564,7 @@ function handleRequest(e) {
       var aciklamaColIdx = findColumnIndex(txHeaders, ["aciklama", "açıklama", "acıklama", "description", "not"]);
 
       var transactions = [];
-      for (var i = 1; i < txRows.length; i++) {
+      for (var i = headerRowIdx + 1; i < txRows.length; i++) {
         var r = txRows[i];
         
         // Eğer her şey boşsa pas geç
@@ -585,7 +597,26 @@ function handleRequest(e) {
       var payments = [];
       if (paySheet) {
         var payRows = paySheet.getDataRange().getValues();
-        var payHeaders = payRows[0] || [];
+        
+        // Ödemeler tablosunda başlık satırını otomatik tespit et
+        var payHeaderRowIdx = 0;
+        for (var rowIdx = 0; rowIdx < Math.min(payRows.length, 10); rowIdx++) {
+          var rowValues = payRows[rowIdx] || [];
+          var rowStr = rowValues.join(" ").toLowerCase();
+          
+          var matchCount = 0;
+          if (rowStr.indexOf("baslik") !== -1 || rowStr.indexOf("başlık") !== -1 || rowStr.indexOf("title") !== -1) matchCount++;
+          if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1) matchCount++;
+          if (rowStr.indexOf("sonodemetarihi") !== -1 || rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1) matchCount++;
+          if (rowStr.indexOf("durum") !== -1 || rowStr.indexOf("status") !== -1) matchCount++;
+          if (rowStr.indexOf("id") !== -1) matchCount++;
+          
+          if (matchCount >= 2) {
+            payHeaderRowIdx = rowIdx;
+            break;
+          }
+        }
+        var payHeaders = payRows[payHeaderRowIdx] || [];
         
         var pIdColIdx = findColumnIndex(payHeaders, ["id", "odemeid"]);
         var pBaslikColIdx = findColumnIndex(payHeaders, ["baslik", "başlık", "title", "aciklama", "isim"]);
@@ -594,7 +625,7 @@ function handleRequest(e) {
         var pKateColIdx = findColumnIndex(payHeaders, ["kategori", "category"]);
         var pDurumColIdx = findColumnIndex(payHeaders, ["durum", "status"]);
 
-        for (var i = 1; i < payRows.length; i++) {
+        for (var i = payHeaderRowIdx + 1; i < payRows.length; i++) {
           var r = payRows[i];
           var hasAtLeastSomething = r.join("").trim().length > 0;
           if (!hasAtLeastSomething) continue;
@@ -1386,7 +1417,7 @@ function handleRequest(e) {
               type="date"
               value={pdfStartDate}
               onChange={(e) => setPdfStartDate(e.target.value)}
-              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-mono"
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
             />
           </div>
 
@@ -1397,7 +1428,7 @@ function handleRequest(e) {
               type="date"
               value={pdfEndDate}
               onChange={(e) => setPdfEndDate(e.target.value)}
-              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-mono"
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
             />
           </div>
         </div>

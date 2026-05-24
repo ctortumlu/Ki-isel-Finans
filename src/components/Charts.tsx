@@ -310,21 +310,21 @@ export default function Charts({ transactions, onNavigateHome }: ChartsProps) {
           >
             <div className="grid grid-cols-2 gap-2 p-3 bg-indigo-50/50 border border-indigo-100/40 rounded-2xl">
               <div>
-                <label className="text-[9px] font-black text-indigo-900 uppercase">Başlangıç Tarihi</label>
+                <label className="text-[9px] font-black text-indigo-900 uppercase pl-1">Başlangıç Tarihi</label>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full mt-1 px-2.5 py-1.5 bg-white border border-slate-200 text-xs text-slate-700 font-mono font-bold rounded-lg outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full h-11 mt-1 px-3 bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
               <div>
-                <label className="text-[9px] font-black text-indigo-900 uppercase">Bitiş Tarihi</label>
+                <label className="text-[9px] font-black text-indigo-900 uppercase pl-1">Bitiş Tarihi</label>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full mt-1 px-2.5 py-1.5 bg-white border border-slate-200 text-xs text-slate-700 font-mono font-bold rounded-lg outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full h-11 mt-1 px-3 bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
             </div>

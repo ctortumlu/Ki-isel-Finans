@@ -29,3 +29,29 @@ body {
 .tab-bar-shadow {
   box-shadow: 0 -8px 20px -6px rgba(209, 233, 245, 0.3);
 }
+
+/* Date Input Mobile/Safari Styling normalization */
+input[type="date"] {
+  position: relative;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 42px; /* Prevent Safari from collapsing heights */
+}
+
+/* Ensure Safari doesn't collapse or hide text inside input type=date and aligns it perfectly */
+input[type="date"]::-webkit-datetime-edit {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Customize native calendar picker icon to render beautifully and not overlap text */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.5;
+  background-color: transparent;
+  padding: 4px;
+}
+

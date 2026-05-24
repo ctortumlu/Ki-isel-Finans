@@ -79,38 +79,32 @@ export default function Dashboard({ transactions, payments, onNavigate, userName
         <div className="absolute -left-16 -top-16 w-36 h-36 rounded-full bg-emerald-500/20 blur-2xl pointer-events-none" />
         <div className="absolute -right-16 -bottom-16 w-40 h-40 rounded-full bg-indigo-500/30 blur-2xl pointer-events-none" />
 
-        <div className="flex items-center justify-between relative z-10">
+        <div className="flex flex-col items-center relative z-10 w-full text-sans">
           
-          {/* Left Side: Stacking Income and Expense vertically */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-1 px-2 bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 rounded-lg text-[9px] font-extrabold uppercase shrink-0 tracking-wider">
-                GELİR
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-300/80 font-bold block leading-none">Aylık Toplam Gelir</span>
-                <span className="text-sm font-black text-emerald-400 font-mono block mt-1.5">{formatCurrency(totalIncome)}</span>
-              </div>
+          {/* Top Section: side-by-side columns for Gelir and Gider */}
+          <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-4 w-full text-center">
+            <div className="flex flex-col items-center justify-center">
+              <span className="text-[9.5px] text-emerald-300 font-extrabold uppercase tracking-widest flex items-center gap-1">
+                <TrendingUp className="w-3.5 h-3.5" /> Gelir
+              </span>
+              <h3 className="text-base font-black font-mono text-emerald-400 mt-1">{formatCurrency(totalIncome)}</h3>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="p-1 px-2 bg-rose-500/25 text-rose-300 border border-rose-500/30 rounded-lg text-[9px] font-extrabold uppercase shrink-0 tracking-wider">
-                GİDER
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-300/80 font-bold block leading-none">Aylık Toplam Gider</span>
-                <span className="text-sm font-black text-rose-400 font-mono block mt-1.5">{formatCurrency(totalExpense)}</span>
-              </div>
+            <div className="flex flex-col items-center justify-center">
+              <span className="text-[9.5px] text-rose-300 font-extrabold uppercase tracking-widest flex items-center gap-1">
+                <TrendingDown className="w-3.5 h-3.5" /> Gider
+              </span>
+              <h3 className="text-base font-black font-mono text-rose-400 mt-1">{formatCurrency(totalExpense)}</h3>
             </div>
           </div>
 
-          {/* Right Side: Large Net Balance Frame */}
-          <div className="text-right border-l border-white/10 pl-5 space-y-1 py-1">
-            <span className="text-[10px] font-extrabold text-indigo-200/60 uppercase tracking-widest block">NET BAKİYE</span>
-            <h1 className={`font-display font-black tracking-tight mt-1.5 font-mono ${
+          {/* Bottom Section: Centered Net Bakiye */}
+          <div className="pt-4 flex flex-col items-center justify-center w-full text-center">
+            <span className="text-[9.5px] font-extrabold text-indigo-200/60 uppercase tracking-widest block">NET BAKİYE</span>
+            <h1 className={`font-display font-black tracking-tight mt-1 font-mono ${
               netBalance >= 0 
                 ? 'text-white' 
-                : 'text-rose-200'
+                : 'text-rose-300'
             } ${
               formatCurrency(netBalance).length < 12
                 ? 'text-2xl'
@@ -118,7 +112,7 @@ export default function Dashboard({ transactions, payments, onNavigate, userName
                   ? 'text-xl'
                   : 'text-lg'
             }`}>
-              {formatCurrency(netBalance)}
+              {netBalance >= 0 ? '+' : ''} {formatCurrency(netBalance)}
             </h1>
           </div>
 
