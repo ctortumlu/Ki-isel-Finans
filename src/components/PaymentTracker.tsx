@@ -306,8 +306,8 @@ export default function PaymentTracker({
     onAddTransaction({
       tarih: todayStr,
       tur: 'Gider',
-      kategori: payTargetPayment.kategori || 'Faturalar',
-      altKategori: 'Genel',
+      kategori: payTargetPayment.kategori || 'Fatura',
+      altKategori: payTargetPayment.baslik || 'Genel',
       tutar: payTargetPayment.tutar,
       aciklama: `${payTargetPayment.baslik} Ödemesi`
     });

@@ -631,7 +631,7 @@ function handleRequest(e) {
           var rowStr = rowValues.join(" ").toLowerCase();
           
           var matchCount = 0;
-          if (rowStr.indexOf("baslik") !== -1 || rowStr.indexOf("başlık") !== -1 || rowStr.indexOf("title") !== -1) matchCount++;
+          if (rowStr.indexOf("baslik") !== -1 || rowStr.indexOf("başlık") !== -1 || rowStr.indexOf("title") !== -1 || rowStr.indexOf("altkat") !== -1 || rowStr.indexOf("atlkat") !== -1 || rowStr.indexOf("alt_kat") !== -1) matchCount++;
           if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1) matchCount++;
           if (rowStr.indexOf("sonodemetarihi") !== -1 || rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1) matchCount++;
           if (rowStr.indexOf("durum") !== -1 || rowStr.indexOf("status") !== -1) matchCount++;
@@ -652,10 +652,10 @@ function handleRequest(e) {
         var payHeaders = payRows[payHeaderRowIdx] || [];
         
         var pIdColIdx = findColumnIndex(payHeaders, ["id", "odemeid"]);
-        var pBaslikColIdx = findColumnIndex(payHeaders, ["baslik", "başlık", "title", "aciklama", "isim"]);
+        var pBaslikColIdx = findColumnIndex(payHeaders, ["baslik", "başlık", "title", "aciklama", "isim", "altkategori", "altkatagori", "alt_kategori", "altkatagor", "atlkatagor", "atlkatagori", "atlkategor", "altkatagoriler", "sub_category", "subcategory"]);
         var pTutarColIdx = findColumnIndex(payHeaders, ["tutar", "amount"]);
         var pTarihColIdx = findColumnIndex(payHeaders, ["sonodemetarihi", "tarih", "date"]);
-        var pKateColIdx = findColumnIndex(payHeaders, ["kategori", "category"]);
+        var pKateColIdx = findColumnIndex(payHeaders, ["kategori", "category", "katagori", "katagor"]);
         var pDurumColIdx = findColumnIndex(payHeaders, ["durum", "status"]);
         var pActivePassiveColIdx = findColumnIndex(payHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
 
@@ -811,7 +811,7 @@ function handleRequest(e) {
           var rowStr = rowValues.join(" ").toLowerCase();
           
           var matchCount = 0;
-          if (rowStr.indexOf("baslik") !== -1 || rowStr.indexOf("başlık") !== -1 || rowStr.indexOf("title") !== -1) matchCount++;
+          if (rowStr.indexOf("baslik") !== -1 || rowStr.indexOf("başlık") !== -1 || rowStr.indexOf("title") !== -1 || rowStr.indexOf("altkat") !== -1 || rowStr.indexOf("atlkat") !== -1 || rowStr.indexOf("alt_kat") !== -1) matchCount++;
           if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1) matchCount++;
           if (rowStr.indexOf("sonodemetarihi") !== -1 || rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1) matchCount++;
           if (rowStr.indexOf("durum") !== -1 || rowStr.indexOf("status") !== -1) matchCount++;
@@ -840,10 +840,10 @@ function handleRequest(e) {
           pStartRow = payHeaderRowIdx + 2;
 
           var pIdCol = findColumnIndex(payHeaders, ["id", "odemeid"]);
-          var pBaslikCol = findColumnIndex(payHeaders, ["baslik", "başlık", "title", "aciklama", "isim"]);
+          var pBaslikCol = findColumnIndex(payHeaders, ["baslik", "başlık", "title", "aciklama", "isim", "altkategori", "altkatagori", "alt_kategori", "altkatagor", "atlkatagor", "atlkatagori", "atlkategor", "altkatagoriler", "sub_category", "subcategory"]);
           var pTutarCol = findColumnIndex(payHeaders, ["tutar", "amount"]);
           var pTarihCol = findColumnIndex(payHeaders, ["sonodemetarihi", "tarih", "date"]);
-          var pKateCol = findColumnIndex(payHeaders, ["kategori", "category"]);
+          var pKateCol = findColumnIndex(payHeaders, ["kategori", "category", "katagori", "katagor"]);
           var pDurumCol = findColumnIndex(payHeaders, ["durum", "status"]);
           var pActivePassiveCol = findColumnIndex(payHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
 
