@@ -103,7 +103,7 @@ export default function App() {
   const triggerBackgroundSync = (
     updatedTxns: Transaction[],
     updatedPmts: RecurringPayment[],
-    target?: 'transactions' | 'payments'
+    target?: 'transactions' | 'payments' | 'all'
   ) => {
     if (isSyncEnabled()) {
       setSyncStatus('syncing');
@@ -162,6 +162,23 @@ export default function App() {
     setPayments(updated);
     savePayments(updated);
     triggerBackgroundSync(transactions, updated, 'payments');
+  };
+
+  const handlePayPayment = (newT: Omit<Transaction, 'id'>, updatedPayment: RecurringPayment) => {
+    const item: Transaction = {
+      ...newT,
+      id: 'txn_' + Date.now(),
+      aktifPasif: 'Aktif',
+    };
+    const updatedTxns = [item, ...transactions];
+    const updatedPmts = payments.map((p) => p.id === updatedPayment.id ? updatedPayment : p);
+
+    setTransactions(updatedTxns);
+    saveTransactions(updatedTxns);
+    setPayments(updatedPmts);
+    savePayments(updatedPmts);
+
+    triggerBackgroundSync(updatedTxns, updatedPmts, 'all');
   };
 
   const handleDeletePayment = (id: string) => {
@@ -223,6 +240,7 @@ export default function App() {
             onAddPayment={handleAddPayment}
             onNavigateHome={() => setActiveTab('pano')}
             onAddTransaction={handleAddTransaction}
+            onPayPayment={handlePayPayment}
           />
         );
       case 'islemler':

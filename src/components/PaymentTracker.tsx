@@ -13,6 +13,7 @@ interface PaymentTrackerProps {
   onAddPayment: (payment: Omit<RecurringPayment, 'id'> | Omit<RecurringPayment, 'id'>[]) => void;
   onNavigateHome: () => void;
   onAddTransaction: (txn: Omit<Transaction, 'id'>) => void;
+  onPayPayment: (txn: Omit<Transaction, 'id'>, payment: RecurringPayment) => void;
 }
 
 export default function PaymentTracker({
@@ -22,6 +23,7 @@ export default function PaymentTracker({
   onAddPayment,
   onNavigateHome,
   onAddTransaction,
+  onPayPayment,
 }: PaymentTrackerProps) {
   const [editingPayment, setEditingPayment] = useState<RecurringPayment | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -210,8 +212,8 @@ export default function PaymentTracker({
     return new Intl.NumberFormat('tr-TR', {
       style: 'currency',
       currency: 'TRY',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(val);
   };
 
@@ -302,18 +304,15 @@ export default function PaymentTracker({
     if (!payTargetPayment) return;
     const todayStr = new Date().toISOString().split('T')[0];
     
-    // Create actual expense transaction in database
-    onAddTransaction({
+    // Create actual expense transaction and archive the payment atomically inside App state
+    onPayPayment({
       tarih: todayStr,
       tur: 'Gider',
       kategori: payTargetPayment.kategori || 'Fatura',
       altKategori: payTargetPayment.baslik || 'Genel',
       tutar: payTargetPayment.tutar,
       aciklama: `${payTargetPayment.baslik} Ödemesi`
-    });
-
-    // Mark as paid
-    onUpdatePayment({
+    }, {
       ...payTargetPayment,
       durum: 'Odendi',
       sonOdemeTarihi: todayStr,

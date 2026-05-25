@@ -98,7 +98,7 @@ export async function syncGetAllData(): Promise<{
 export async function syncSaveAllData(
   transactions: Transaction[],
   payments: RecurringPayment[],
-  target?: 'transactions' | 'payments'
+  target?: 'transactions' | 'payments' | 'all'
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     const result = await callAppsScript('saveAllData', { transactions, payments, target });
