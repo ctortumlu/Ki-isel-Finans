@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, Check, Copy, FileSpreadsheet, Settings as SettingsIcon, Link, CheckCircle, 
@@ -76,11 +76,77 @@ export default function Settings({
   const [importNotification, setImportNotification] = useState<{ type: 'success' | 'refused', msg: string } | null>(null);
 
   // PDF Export selections
+  const [pdfDateRangeType, setPdfDateRangeType] = useState<'bu_ay' | 'bu_yil' | 'tum_zamanlar' | 'ozel'>('bu_ay');
   const [pdfTypeFilter, setPdfTypeFilter] = useState<'Tümü' | 'Gelir' | 'Gider'>('Tümü');
+  const [pdfCategoryFilter, setPdfCategoryFilter] = useState<string>('Tümü');
+  const [pdfSubCategoryFilter, setPdfSubCategoryFilter] = useState<string>('Tümü');
   const [pdfStartDate, setPdfStartDate] = useState('');
   const [pdfEndDate, setPdfEndDate] = useState('');
   const [pdfTheme, setPdfTheme] = useState<'indigo' | 'emerald' | 'charcoal' | 'rose'>('indigo');
   const [includeAnalytics, setIncludeAnalytics] = useState<boolean>(true);
+
+  // Filter transactions by date range for PDF
+  const pdfDateFilteredTransactions = useMemo(() => {
+    const today = new Date();
+    let startLimit = new Date(1970, 0, 1);
+    let endLimit = new Date(2100, 11, 31);
+
+    if (pdfDateRangeType === 'bu_ay') {
+      startLimit = new Date(today.getFullYear(), today.getMonth(), 1);
+      endLimit = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+    } else if (pdfDateRangeType === 'bu_yil') {
+      startLimit = new Date(today.getFullYear(), 0, 1);
+      endLimit = new Date(today.getFullYear(), 11, 31, 23, 59, 59);
+    } else if (pdfDateRangeType === 'ozel') {
+      if (pdfStartDate) {
+        startLimit = new Date(pdfStartDate);
+        startLimit.setHours(0, 0, 0, 0);
+      }
+      if (pdfEndDate) {
+        endLimit = new Date(pdfEndDate);
+        endLimit.setHours(23, 59, 59, 999);
+      }
+    }
+
+    return transactions.filter((t) => {
+      const tDate = new Date(t.tarih);
+      return tDate >= startLimit && tDate <= endLimit;
+    });
+  }, [transactions, pdfDateRangeType, pdfStartDate, pdfEndDate]);
+
+  // Dynamically compile active categories in the filtered range for PDF
+  const pdfAvailableCategories = useMemo(() => {
+    const cats = new Set<string>();
+    pdfDateFilteredTransactions.forEach((t) => {
+      if (pdfTypeFilter === 'Tümü' || t.tur === pdfTypeFilter) {
+        if (t.kategori) cats.add(t.kategori);
+      }
+    });
+    return Array.from(cats).sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [pdfDateFilteredTransactions, pdfTypeFilter]);
+
+  // Dynamically compile subcategories map
+  const pdfAvailableSubCategories = useMemo(() => {
+    const subs = new Set<string>();
+    pdfDateFilteredTransactions.forEach((t) => {
+      if (pdfTypeFilter !== 'Tümü' && t.tur !== pdfTypeFilter) return;
+      if (pdfCategoryFilter !== 'Tümü' && t.kategori !== pdfCategoryFilter) return;
+      
+      if (t.altKategori && t.altKategori !== 'Genel' && t.altKategori !== 'undefined' && t.altKategori.trim()) {
+        subs.add(t.altKategori);
+      }
+    });
+    return Array.from(subs).sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [pdfDateFilteredTransactions, pdfTypeFilter, pdfCategoryFilter]);
+
+  // Reset nested filters on dependency changes
+  useEffect(() => {
+    setPdfCategoryFilter('Tümü');
+  }, [pdfTypeFilter, pdfDateRangeType]);
+
+  useEffect(() => {
+    setPdfSubCategoryFilter('Tümü');
+  }, [pdfCategoryFilter]);
 
   // CSV Restore selections
   const [csvRestoreRows, setCsvRestoreRows] = useState<Transaction[]>([]);
@@ -1198,15 +1264,15 @@ function handleRequest(e) {
     }
 
     // Filter transactions according to selected filter
-    let filtered = [...transactions];
+    let filtered = [...pdfDateFilteredTransactions];
     if (pdfTypeFilter !== 'Tümü') {
       filtered = filtered.filter(t => t.tur === pdfTypeFilter);
     }
-    if (pdfStartDate) {
-      filtered = filtered.filter(t => t.tarih >= pdfStartDate);
+    if (pdfCategoryFilter !== 'Tümü') {
+      filtered = filtered.filter(t => t.kategori === pdfCategoryFilter);
     }
-    if (pdfEndDate) {
-      filtered = filtered.filter(t => t.tarih <= pdfEndDate);
+    if (pdfSubCategoryFilter !== 'Tümü') {
+      filtered = filtered.filter(t => t.altKategori === pdfSubCategoryFilter);
     }
 
     if (filtered.length === 0) {
@@ -1265,12 +1331,28 @@ function handleRequest(e) {
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.5);
-    const dateRangeStr = (pdfStartDate || pdfEndDate)
-      ? `${pdfStartDate ? pdfStartDate.split('-').reverse().join('.') : 'Bilinmeyen'} - ${pdfEndDate ? pdfEndDate.split('-').reverse().join('.') : 'Bilinmeyen'}`
-      : 'Tum Donemler';
     
+    let dateRangeStr = 'Tum Donemler';
+    if (pdfDateRangeType === 'bu_ay') {
+      const months = ['Ocak', 'Subat', 'Mart', 'Nisan', 'Mayis', 'Haziran', 'Temmuz', 'Agustos', 'Eylul', 'Ekim', 'Kasim', 'Aralik'];
+      const today = new Date();
+      dateRangeStr = `${months[today.getMonth()]} ${today.getFullYear()}`;
+    } else if (pdfDateRangeType === 'bu_yil') {
+      dateRangeStr = `${new Date().getFullYear()} Yili`;
+    } else if (pdfDateRangeType === 'ozel') {
+      dateRangeStr = `${pdfStartDate ? pdfStartDate.split('-').reverse().join('.') : 'Bilinmeyen'} - ${pdfEndDate ? pdfEndDate.split('-').reverse().join('.') : 'Bilinmeyen'}`;
+    }
+
+    let filterDetailsText = `${pdfTypeFilter}`;
+    if (pdfCategoryFilter !== 'Tümü') {
+      filterDetailsText += ` . Kategori: ${pdfCategoryFilter}`;
+      if (pdfSubCategoryFilter !== 'Tümü') {
+        filterDetailsText += ` / ${pdfSubCategoryFilter}`;
+      }
+    }
+
     doc.text(
-      trToAscii(`Rapor Araligi: ${dateRangeStr}  |  Islem Turu Filtresi: ${pdfTypeFilter}`), 
+      trToAscii(`Rapor Araligi: ${dateRangeStr}  |  Islem: ${filterDetailsText}`), 
       15, 24
     );
     doc.text(
@@ -1607,18 +1689,77 @@ function handleRequest(e) {
           </div>
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">PDF Hesap Ekstresi Oluştur</h3>
-            <p className="text-[10.5px] text-slate-500 leading-normal mt-0.5">Mobil kaydedilen gelir/gider veritabanınızı anında resmi ve PDF tablosu olarak cihazınıza indirin.</p>
+            <p className="text-[10.5px] text-slate-500 leading-normal mt-0.5">Mobil kaydedilen gelir/gider veritabanınızı anında resmi ve ve filtreli PDF tablosu olarak cihazınıza indirin.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1.5">
+        {/* Date range selection tabs */}
+        <div className="space-y-1 pt-1">
+          <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tarih Aralığı Filtresi</label>
+          <div className="bg-slate-100/70 border border-slate-200/50 p-1.5 rounded-2xl grid grid-cols-4 gap-1">
+            {[
+              { id: 'bu_ay', label: 'Bu Ay' },
+              { id: 'bu_yil', label: 'Yıllık' },
+              { id: 'tum_zamanlar', label: 'Tümü' },
+              { id: 'ozel', label: 'Özel 🗓️' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setPdfDateRangeType(tab.id as any)}
+                className={`py-2 rounded-xl text-[10.5px] font-black transition-all cursor-pointer ${
+                  pdfDateRangeType === tab.id
+                    ? 'bg-indigo-620 bg-indigo-600 text-white shadow-3xs'
+                    : 'text-slate-500 hover:text-slate-750 hover:bg-slate-200/40 bg-transparent'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Sub menu for Custom dates inputs */}
+        <AnimatePresence>
+          {pdfDateRangeType === 'ozel' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="grid grid-cols-2 gap-3 p-3 bg-indigo-50/50 border border-indigo-100/40 rounded-2xl">
+                <div>
+                  <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Başlangıç Tarihi</label>
+                  <input
+                    type="date"
+                    value={pdfStartDate}
+                    onChange={(e) => setPdfStartDate(e.target.value)}
+                    className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Bitiş Tarihi</label>
+                  <input
+                    type="date"
+                    value={pdfEndDate}
+                    onChange={(e) => setPdfEndDate(e.target.value)}
+                    className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Format Selection Dropdown */}
-          <div>
-            <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">İşlem Türü</label>
+          <div className="space-y-1">
+            <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block">İşlem Türü</label>
             <select
               value={pdfTypeFilter}
               onChange={(e: any) => setPdfTypeFilter(e.target.value)}
-              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold cursor-pointer"
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold cursor-pointer"
             >
               <option value="Tümü">Tüm İşlemler</option>
               <option value="Gelir">Sadece Gelirler</option>
@@ -1626,26 +1767,39 @@ function handleRequest(e) {
             </select>
           </div>
 
-          {/* Start Date */}
-          <div>
-            <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Başlangıç Tarihi</label>
-            <input
-              type="date"
-              value={pdfStartDate}
-              onChange={(e) => setPdfStartDate(e.target.value)}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
-            />
+          {/* Kategori Selection Dropdown */}
+          <div className="space-y-1">
+            <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block">Kategori</label>
+            <select
+              value={pdfCategoryFilter}
+              onChange={(e) => setPdfCategoryFilter(e.target.value)}
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold cursor-pointer"
+            >
+              <option value="Tümü">Tüm Kategoriler (Tümü)</option>
+              {pdfAvailableCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* End Date */}
-          <div>
-            <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Bitiş Tarihi</label>
-            <input
-              type="date"
-              value={pdfEndDate}
-              onChange={(e) => setPdfEndDate(e.target.value)}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold"
-            />
+          {/* Alt Kategori Selection Dropdown */}
+          <div className="space-y-1">
+            <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block">Alt Kategori</label>
+            <select
+              value={pdfSubCategoryFilter}
+              onChange={(e) => setPdfSubCategoryFilter(e.target.value)}
+              disabled={pdfAvailableSubCategories.length === 0}
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="Tümü">Tüm Alt Kategoriler (Tümü)</option>
+              {pdfAvailableSubCategories.map((sub) => (
+                <option key={sub} value={sub}>
+                  {sub}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
  
@@ -1695,7 +1849,7 @@ function handleRequest(e) {
           </div>
         </div>
 
-        {(pdfStartDate || pdfEndDate) && (
+        {(pdfDateRangeType === 'ozel' && (pdfStartDate || pdfEndDate)) && (
           <div className="flex justify-end pr-1">
             <button
               type="button"
@@ -1705,7 +1859,7 @@ function handleRequest(e) {
               }}
               className="text-[10px] font-bold text-rose-500 hover:text-rose-600 hover:underline cursor-pointer"
             >
-              Rapor Tarihlerini Temizle
+              Filtre Tarihlerini Temizle
             </button>
           </div>
         )}
