@@ -824,7 +824,7 @@ export default function PaymentTracker({
       <ConfirmModal
         isOpen={isPayConfirmOpen}
         title="Ödeme İşlemi Onayı"
-        message={`"${payTargetPayment?.baslik}" fatura/ödeme işlemi gerçekleşecektir. Bu kayıt, ödeme günü (bugün) yeni bir "Gider" işlemi olarak kaydedilecek ve bekleyen listesinden kaldırılacaktır. Onaylıyor musunuz?`}
+        message={`"${payTargetPayment?.baslik}" işlemi bekleyen ödemeler listesinden kaldırılacaktır. Onayınızı verdikten sonra bu işlem bugün tarihi ile yeni bir hızlı "Gider" işlemi olarak sisteme kaydedilecektir. Onaylıyor musunuz?`}
         confirmText="Evet, Öde"
         cancelText="Vazgeç"
         isDangerous={false}
