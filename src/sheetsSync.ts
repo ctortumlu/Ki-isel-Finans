@@ -103,14 +103,27 @@ export async function syncSaveAllData(
   try {
     const activeTarget = target || 'all';
 
-    // A single execution post is extremely fast, avoids Google Apps Script lock/concurrency errors,
-    // and is 100% backward & forward compatible with both older and newer Apps Script.
-    const result = await callAppsScript('saveAllData', { transactions, payments, target: activeTarget });
-    if (result && result.success) {
+    if (activeTarget === 'all') {
+      // 100% Backward compatible atomic sync: Write transactions first, then payments sequentially.
+      // This ensures both tables in Google Sheets are fully populated even with older deployed Apps Script!
+      const resTx = await callAppsScript('saveAllData', { transactions, payments, target: 'transactions' });
+      if (!resTx || !resTx.success) {
+        return { success: false, error: resTx?.error || 'İşlemler (Gelir/Gider) senkronize edilirken hata oluştu.' };
+      }
+      const resPay = await callAppsScript('saveAllData', { transactions, payments, target: 'payments' });
+      if (!resPay || !resPay.success) {
+        return { success: false, error: resPay?.error || 'Ödemeler tablosu senkronize edilirken hata oluştu.' };
+      }
       setLastSyncTime(new Date().toLocaleString('tr-TR'));
-      return { success: true, message: result.message };
+      return { success: true, message: 'Tüm veriler başarıyla eşitlendi.' };
+    } else {
+      const result = await callAppsScript('saveAllData', { transactions, payments, target: activeTarget });
+      if (result && result.success) {
+        setLastSyncTime(new Date().toLocaleString('tr-TR'));
+        return { success: true, message: result.message };
+      }
+      return { success: false, error: result?.error || 'Buluta kaydetme işlemi başarısız oldu.' };
     }
-    return { success: false, error: result?.error || 'Buluta kaydetme işlemi başarısız oldu.' };
   } catch (e: any) {
     return { success: false, error: e.toString() };
   }
