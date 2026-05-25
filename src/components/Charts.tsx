@@ -38,12 +38,11 @@ export default function Charts({ transactions, onNavigateHome }: ChartsProps) {
 
   // Currencies formatting helper
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('tr-TR', {
-      style: 'currency',
-      currency: 'TRY',
+    if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
+    return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(val);
+    }) + ' ₺';
   };
 
   // Filter transactions by date range
@@ -600,10 +599,14 @@ export default function Charts({ transactions, onNavigateHome }: ChartsProps) {
                         ? 'bg-emerald-50 border-emerald-100' 
                         : 'bg-rose-50 border-rose-100'
                     }`}>
-                      {getCategoryEmoji(item.kategori)}
+                      {getCategoryEmoji(item.kategori, item.altKategori, item.aciklama)}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-805 truncate">{item.aciklama || item.kategori}</p>
+                      <p className="text-xs font-bold text-slate-850 truncate">
+                        {item.aciklama?.trim() && item.aciklama !== "undefined"
+                          ? item.aciklama
+                          : (item.altKategori && item.altKategori !== 'Genel' ? item.altKategori : item.kategori)}
+                      </p>
                       <p className="text-[9px] text-slate-400 font-bold font-mono mt-0.5">
                         {item.tarih} • <span className="text-slate-600 font-extrabold">{item.kategori}</span>
                         {item.altKategori && <span className="text-slate-500 font-medium"> / {item.altKategori}</span>}

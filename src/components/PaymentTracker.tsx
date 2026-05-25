@@ -209,12 +209,11 @@ export default function PaymentTracker({
   };
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('tr-TR', {
-      style: 'currency',
-      currency: 'TRY',
+    if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
+    return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(val);
+    }) + ' ₺';
   };
 
   // Sort: Pending payments sorted by due date ascending (closest first), followed by Paid payments
@@ -529,7 +528,7 @@ export default function PaymentTracker({
                         className="flex justify-between items-center p-2 rounded-xl bg-indigo-50/50 border border-indigo-100 text-xs"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[13px]">{getCategoryEmoji(item.kategori)}</span>
+                          <span className="font-mono text-[13px]">{getCategoryEmoji(item.kategori, item.baslik)}</span>
                           <div className="min-w-0">
                             <h4 className="font-bold text-slate-900 truncate text-[11px] leading-tight font-sans">{item.baslik}</h4>
                             <p className="text-[9px] text-slate-500 font-mono leading-none mt-0.5">
@@ -607,7 +606,7 @@ export default function PaymentTracker({
               <div className="flex justify-between items-center gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-sm p-1 bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center shrink-0 font-mono">
-                    {getCategoryEmoji(p.kategori)}
+                    {getCategoryEmoji(p.kategori, p.baslik)}
                   </span>
                   <div className="min-w-0">
                     <h4 className="font-display font-black text-slate-900 text-[13px] truncate leading-tight">

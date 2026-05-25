@@ -94,14 +94,18 @@ export async function syncGetAllData(): Promise<{
   }
 }
 
-// Save all transactions and payments to sheets (supports optional targeted sheet sync)
+// Save all transactions and payments to sheets (supports optional targeted sheet sync with backward compatibility)
 export async function syncSaveAllData(
   transactions: Transaction[],
   payments: RecurringPayment[],
   target?: 'transactions' | 'payments' | 'all'
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
-    const result = await callAppsScript('saveAllData', { transactions, payments, target });
+    const activeTarget = target || 'all';
+
+    // A single execution post is extremely fast, avoids Google Apps Script lock/concurrency errors,
+    // and is 100% backward & forward compatible with both older and newer Apps Script.
+    const result = await callAppsScript('saveAllData', { transactions, payments, target: activeTarget });
     if (result && result.success) {
       setLastSyncTime(new Date().toLocaleString('tr-TR'));
       return { success: true, message: result.message };

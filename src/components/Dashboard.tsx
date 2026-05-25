@@ -43,12 +43,11 @@ export default function Dashboard({
   }).length;
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('tr-TR', {
-      style: 'currency',
-      currency: 'TRY',
+    if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
+    return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(val);
+    }) + ' ₺';
   };
 
   // Modern greeting based on time (relative to 2026-05-22 UTC)
@@ -218,10 +217,14 @@ export default function Dashboard({
                       ? 'bg-emerald-50 border-emerald-200/50' 
                       : 'bg-rose-50 border-rose-200/50'
                   }`}>
-                    {getCategoryEmoji(item.kategori)}
+                    {getCategoryEmoji(item.kategori, item.altKategori, item.aciklama)}
                   </span>
                   <div>
-                    <p className="text-xs font-bold text-slate-800">{item.aciklama || item.kategori}</p>
+                    <p className="text-xs font-bold text-slate-800">
+                      {item.aciklama?.trim() && item.aciklama !== "undefined"
+                        ? item.aciklama
+                        : (item.altKategori && item.altKategori !== 'Genel' ? item.altKategori : item.kategori)}
+                    </p>
                     <p className="text-[10px] text-slate-500 font-bold font-mono mt-0.5">{item.tarih} • {item.kategori}</p>
                   </div>
                 </div>

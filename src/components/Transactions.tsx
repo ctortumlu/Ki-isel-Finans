@@ -41,12 +41,11 @@ export default function Transactions({
   }, []);
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('tr-TR', {
-      style: 'currency',
-      currency: 'TRY',
+    if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
+    return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(val);
+    }) + ' ₺';
   };
 
 
@@ -247,7 +246,7 @@ export default function Transactions({
         <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-0.5 scrollbar-thin">
           <AnimatePresence initial={false}>
             {filteredTransactions.map((t) => {
-              const emoji = getCategoryEmoji(t.kategori);
+              const emoji = getCategoryEmoji(t.kategori, t.altKategori, t.aciklama);
               const isGelir = t.tur === 'Gelir';
               const trDateFormatted = t.tarih.split('-').reverse().join('.');
 
@@ -275,7 +274,9 @@ export default function Transactions({
 
                     <div className="min-w-0">
                       <h5 className="text-[12.5px] font-sans font-black text-slate-800 leading-snug truncate">
-                        {t.aciklama}
+                        {t.aciklama?.trim() && t.aciklama !== "undefined"
+                          ? t.aciklama
+                          : (t.altKategori && t.altKategori !== 'Genel' ? t.altKategori : t.kategori)}
                       </h5>
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5 leading-none">
                         <span className="text-[9.5px] text-slate-500 font-mono">{trDateFormatted}</span>
