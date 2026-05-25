@@ -8,6 +8,7 @@ export interface Transaction {
   altKategori?: string;
   tutar: number;
   aciklama: string;
+  aktifPasif?: 'Aktif' | 'Pasif';
   faturaFile?: {
     name: string;
     size: string;
@@ -23,6 +24,7 @@ export interface RecurringPayment {
   sonOdemeTarihi: string; // YYYY-MM-DD
   kategori: string;
   durum: 'Bekliyor' | 'Odendi';
+  aktifPasif?: 'Aktif' | 'Pasif';
 }
 
 export interface Category {

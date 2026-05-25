@@ -94,13 +94,14 @@ export async function syncGetAllData(): Promise<{
   }
 }
 
-// Save all transactions and payments to sheets
+// Save all transactions and payments to sheets (supports optional targeted sheet sync)
 export async function syncSaveAllData(
   transactions: Transaction[],
-  payments: RecurringPayment[]
+  payments: RecurringPayment[],
+  target?: 'transactions' | 'payments'
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
-    const result = await callAppsScript('saveAllData', { transactions, payments });
+    const result = await callAppsScript('saveAllData', { transactions, payments, target });
     if (result && result.success) {
       setLastSyncTime(new Date().toLocaleString('tr-TR'));
       return { success: true, message: result.message };

@@ -316,7 +316,8 @@ export default function PaymentTracker({
     onUpdatePayment({
       ...payTargetPayment,
       durum: 'Odendi',
-      sonOdemeTarihi: todayStr
+      sonOdemeTarihi: todayStr,
+      aktifPasif: 'Pasif'
     });
 
     setIsPayConfirmOpen(false);

@@ -414,6 +414,15 @@ function handleRequest(e) {
   var action = e && e.parameter ? e.parameter.action : "";
   var payload = {};
   
+  // 1. SILENT CONCURRENCY LOCK (Protects Google Tables / prevents race-condition layout shifts)
+  var lock = LockService.getScriptLock();
+  var gotLock = false;
+  try {
+    gotLock = lock.tryLock(30000); // Wait up to 30 seconds
+  } catch(lockErr) {
+    // ignore lock initialization errors
+  }
+  
   try {
     if (e && e.postData && e.postData.contents) {
       payload = JSON.parse(e.postData.contents);
@@ -560,14 +569,8 @@ function handleRequest(e) {
       }
 
       // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - İŞLEMLER TABLOSU:
-      // Eğer başlık satırı Row 2 veya sonrasında bulunmuşsa (yani ilk satırda Google Sheets tarafından otomatik eklenen "1. sütun" vb. bozuk başlıklar varsa),
-      // ilk satırı silelim ki gerçek başlıklarımız Row 1'e yerleşsin ve Excel/Sheets süzgeçleri düzgün çalışsın!
-      if (headerRowIdx > 0) {
-        txSheet.deleteRow(1);
-        Utilities.sleep(100);
-        txRows = txSheet.getDataRange().getValues();
-        headerRowIdx = headerRowIdx - 1;
-      }
+      // Google Sheets Tabloları (Google Tables) aktifken ilk satırın silinmesi yapısal bozulma tetikleyebilir.
+      // Eşleşen başlık satırını olduğu gibi okuyoruz, asla fiziksel satır silme işlemi yapmıyoruz!
       if (headerRowIdx === -1) {
         headerRowIdx = 0;
       }
@@ -582,6 +585,7 @@ function handleRequest(e) {
       var altKategoriColIdx = findColumnIndex(txHeaders, ["altkategori", "altkatagori", "alt_kategori", "subcategory"]);
       var tutarColIdx = findColumnIndex(txHeaders, ["tutar", "amount", "fiyat"]);
       var aciklamaColIdx = findColumnIndex(txHeaders, ["aciklama", "açıklama", "acıklama", "description", "not"]);
+      var activePassiveColIdx = findColumnIndex(txHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
 
       var transactions = [];
       for (var i = headerRowIdx + 1; i < txRows.length; i++) {
@@ -599,6 +603,7 @@ function handleRequest(e) {
         var rawAltKategori = altKategoriColIdx !== -1 ? r[altKategoriColIdx] : "Genel";
         var rawTutar = tutarColIdx !== -1 ? r[tutarColIdx] : 0;
         var rawAciklama = aciklamaColIdx !== -1 ? r[aciklamaColIdx] : "";
+        var rawActivePassive = activePassiveColIdx !== -1 ? r[activePassiveColIdx] : "Aktif";
 
         // ID yoksa satır sırasına göre stabil bir ID üret (React çökmesin diye hayati)
         var rowId = rawId ? String(rawId).trim() : ("txn_tablo_" + i + "_" + Math.floor(parseNumberSafe(rawTutar)));
@@ -610,7 +615,8 @@ function handleRequest(e) {
           kategori: String(rawKategori),
           altKategori: String(rawAltKategori),
           tutar: parseNumberSafe(rawTutar),
-          aciklama: String(rawAciklama)
+          aciklama: String(rawAciklama),
+          aktifPasif: String(rawActivePassive).trim() === "Pasif" ? "Pasif" : "Aktif"
         });
       }
       
@@ -638,12 +644,7 @@ function handleRequest(e) {
         }
 
         // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - ÖDEMELER TABLOSU:
-        if (payHeaderRowIdx > 0) {
-          paySheet.deleteRow(1);
-          Utilities.sleep(100);
-          payRows = paySheet.getDataRange().getValues();
-          payHeaderRowIdx = payHeaderRowIdx - 1;
-        }
+        // Respect the detected header row as-is. Prevents Google Tables corruption.
         if (payHeaderRowIdx === -1) {
           payHeaderRowIdx = 0;
         }
@@ -656,6 +657,7 @@ function handleRequest(e) {
         var pTarihColIdx = findColumnIndex(payHeaders, ["sonodemetarihi", "tarih", "date"]);
         var pKateColIdx = findColumnIndex(payHeaders, ["kategori", "category"]);
         var pDurumColIdx = findColumnIndex(payHeaders, ["durum", "status"]);
+        var pActivePassiveColIdx = findColumnIndex(payHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
 
         for (var i = payHeaderRowIdx + 1; i < payRows.length; i++) {
           var r = payRows[i];
@@ -668,6 +670,7 @@ function handleRequest(e) {
           var rawPTarih = pTarihColIdx !== -1 ? r[pTarihColIdx] : "";
           var rawPKate = pKateColIdx !== -1 ? r[pKateColIdx] : "Faturalar";
           var rawPDurum = pDurumColIdx !== -1 ? r[pDurumColIdx] : "Bekliyor";
+          var rawPActivePassive = pActivePassiveColIdx !== -1 ? r[pActivePassiveColIdx] : "Aktif";
 
           var paymentId = rawPId ? String(rawPId).trim() : ("pay_gen_" + i);
 
@@ -677,7 +680,8 @@ function handleRequest(e) {
             tutar: parseNumberSafe(rawPTutar),
             sonOdemeTarihi: parseDateToISO(rawPTarih),
             kategori: String(rawPKate),
-            durum: String(rawPDurum)
+            durum: String(rawPDurum),
+            aktifPasif: String(rawPActivePassive).trim() === "Pasif" ? "Pasif" : "Aktif"
           });
         }
       }
@@ -692,99 +696,114 @@ function handleRequest(e) {
     else if (action === "saveAllData") {
       var transactions = payload.transactions || [];
       var payments = payload.payments || [];
+      var target = payload.target || "all";
       
       // --- İŞLEMLERİ YAZILACAK ---
-      var txRows = txSheet.getDataRange().getValues();
-      var txHeaderRowIdx = -1;
-      for (var rowIdx = 0; rowIdx < Math.min(txRows.length, 10); rowIdx++) {
-        var rowValues = txRows[rowIdx] || [];
-        var rowStr = rowValues.join(" ").toLowerCase();
-        
-        var matchCount = 0;
-        if (rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1 || rowStr.indexOf("gun") !== -1) matchCount++;
-        if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1 || rowStr.indexOf("fiyat") !== -1) matchCount++;
-        if (rowStr.indexOf("tur") !== -1 || rowStr.indexOf("tür") !== -1 || rowStr.indexOf("type") !== -1) matchCount++;
-        if (rowStr.indexOf("kategori") !== -1 || rowStr.indexOf("category") !== -1 || rowStr.indexOf("katagori") !== -1) matchCount++;
-        if (rowStr.indexOf("id") !== -1) matchCount++;
-        
-        if (matchCount >= 2) {
-          txHeaderRowIdx = rowIdx;
-          break;
-        }
-      }
-
-      // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - İŞLEMLER TABLOSU KAYDETME:
-      if (txHeaderRowIdx > 0) {
-        txSheet.deleteRow(1);
-        Utilities.sleep(100);
-        txRows = txSheet.getDataRange().getValues();
-        txHeaderRowIdx = txHeaderRowIdx - 1;
-      }
-
-      var txHeaders;
-      var startRow;
-      var txOutput2D = [];
-
-      if (txHeaderRowIdx !== -1) {
-        txHeaders = txRows[txHeaderRowIdx];
-        startRow = txHeaderRowIdx + 2; // İlk veri satırının 1 tabanlı indeksi
-
-        var idCol = findColumnIndex(txHeaders, ["id", "islemid", "transid"]);
-        var tarihCol = findColumnIndex(txHeaders, ["tarih", "date", "gun"]);
-        var turCol = findColumnIndex(txHeaders, ["tur", "tür", "type"]);
-        var katCol = findColumnIndex(txHeaders, ["kategori", "katagori", "category"]);
-        var altKatCol = findColumnIndex(txHeaders, ["altkategori", "altkatagori", "subcategory"]);
-        var tutarCol = findColumnIndex(txHeaders, ["tutar", "amount", "fiyat"]);
-        var aciklamaCol = findColumnIndex(txHeaders, ["aciklama", "açıklama", "acıklama", "description", "not"]);
-
-        transactions.forEach(function(tx) {
-          var newRow = new Array(txHeaders.length);
-          for (var c = 0; c < txHeaders.length; c++) newRow[c] = "";
+      if (target === "all" || target === "transactions") {
+        var txRows = txSheet.getDataRange().getValues();
+        var txHeaderRowIdx = -1;
+        for (var rowIdx = 0; rowIdx < Math.min(txRows.length, 10); rowIdx++) {
+          var rowValues = txRows[rowIdx] || [];
+          var rowStr = rowValues.join(" ").toLowerCase();
           
-          if (idCol !== -1) newRow[idCol] = tx.id;
-          if (tarihCol !== -1) newRow[tarihCol] = tx.tarih;
-          if (turCol !== -1) newRow[turCol] = tx.tur;
-          if (katCol !== -1) newRow[katCol] = tx.kategori;
-          if (altKatCol !== -1) newRow[altKatCol] = tx.altKategori || 'Genel';
-          if (tutarCol !== -1) newRow[tutarCol] = tx.tutar;
-          if (aciklamaCol !== -1) newRow[aciklamaCol] = tx.aciklama || '';
+          var matchCount = 0;
+          if (rowStr.indexOf("tarih") !== -1 || rowStr.indexOf("date") !== -1 || rowStr.indexOf("gun") !== -1) matchCount++;
+          if (rowStr.indexOf("tutar") !== -1 || rowStr.indexOf("amount") !== -1 || rowStr.indexOf("fiyat") !== -1) matchCount++;
+          if (rowStr.indexOf("tur") !== -1 || rowStr.indexOf("tür") !== -1 || rowStr.indexOf("type") !== -1) matchCount++;
+          if (rowStr.indexOf("kategori") !== -1 || rowStr.indexOf("category") !== -1 || rowStr.indexOf("katagori") !== -1) matchCount++;
+          if (rowStr.indexOf("id") !== -1) matchCount++;
           
-          txOutput2D.push(newRow);
-        });
+          if (matchCount >= 2) {
+            txHeaderRowIdx = rowIdx;
+            break;
+          }
+        }
 
-        // Sadece veri satırlarının içeriğini temizle (biçimlendirmeleri silme!)
-        var lastTxRow = txSheet.getLastRow();
-        if (lastTxRow >= startRow) {
-          txSheet.getRange(startRow, 1, lastTxRow - startRow + 1, txHeaders.length).clearContent();
+        // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - İŞLEMLER TABLOSU KAYDETME:
+        // Google Sheets Tabloları (Google Tables) aktifken ilk satırın silinmesi yapısal bozulma tetikleyebilir.
+        // Eşleşen başlık satırını olduğu gibi okuyoruz, asla fiziksel satır silme işlemi yapmıyoruz!
+        if (txHeaderRowIdx === -1) {
+          if (txSheet.getLastRow() > 0) {
+            txHeaderRowIdx = 0;
+          }
         }
-        // Verileri tek seferde toplu yaz
-        if (txOutput2D.length > 0) {
-          txSheet.getRange(startRow, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
-        }
-      } else {
-        // Yedek durum: Başlık bulunamadıysa sıfırdan oluştur
-        txHeaders = ["id", "Tarih", "Tür", "Katagori", "Alt katagori", "Tutar", "Açıklama"];
-        txSheet.clearContents();
-        txSheet.getRange(1, 1, 1, txHeaders.length).setValues([txHeaders]);
-        
-        transactions.forEach(function(tx) {
-          txOutput2D.push([
-            tx.id,
-            tx.tarih,
-            tx.tur,
-            tx.kategori,
-            tx.altKategori || 'Genel',
-            tx.tutar,
-            tx.aciklama || ''
-          ]);
-        });
-        if (txOutput2D.length > 0) {
-          txSheet.getRange(2, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
+
+        var txHeaders;
+        var startRow;
+        var txOutput2D = [];
+
+        if (txHeaderRowIdx !== -1) {
+          txHeaders = txRows[txHeaderRowIdx];
+          startRow = txHeaderRowIdx + 2; // İlk veri satırının 1 tabanlı indeksi
+
+          var idCol = findColumnIndex(txHeaders, ["id", "islemid", "transid"]);
+          var tarihCol = findColumnIndex(txHeaders, ["tarih", "date", "gun"]);
+          var turCol = findColumnIndex(txHeaders, ["tur", "tür", "type"]);
+          var katCol = findColumnIndex(txHeaders, ["kategori", "katagori", "category"]);
+          var altKatCol = findColumnIndex(txHeaders, ["altkategori", "altkatagori", "subcategory"]);
+          var tutarCol = findColumnIndex(txHeaders, ["tutar", "amount", "fiyat"]);
+          var aciklamaCol = findColumnIndex(txHeaders, ["aciklama", "açıklama", "acıklama", "description", "not"]);
+          var activePassiveCol = findColumnIndex(txHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
+
+          transactions.forEach(function(tx) {
+            var newRow = new Array(txHeaders.length);
+            for (var c = 0; c < txHeaders.length; c++) newRow[c] = "";
+            
+            if (idCol !== -1) newRow[idCol] = tx.id;
+            if (tarihCol !== -1) newRow[tarihCol] = tx.tarih;
+            if (turCol !== -1) newRow[turCol] = tx.tur;
+            if (katCol !== -1) newRow[katCol] = tx.kategori;
+            if (altKatCol !== -1) newRow[altKatCol] = tx.altKategori || 'Genel';
+            if (tutarCol !== -1) newRow[tutarCol] = tx.tutar;
+            if (aciklamaCol !== -1) newRow[aciklamaCol] = tx.aciklama || '';
+            if (activePassiveCol !== -1) newRow[activePassiveCol] = tx.aktifPasif || 'Aktif';
+            
+            txOutput2D.push(newRow);
+          });
+
+          // 1. Verileri doğrudan mevcut hücrelerin üzerine yaz (asla komple silip sıfırdan oluşturma yok!)
+          if (txOutput2D.length > 0) {
+            txSheet.getRange(startRow, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
+            if (tutarCol !== -1) {
+              // Tutar sütununu SAYI formatına zorlayarak tarihe dönüşmesini kesinlikle engelliyoruz!
+              txSheet.getRange(startRow, tutarCol + 1, txOutput2D.length, 1).setNumberFormat('0.00');
+            }
+          }
+
+          // 2. Eğer eski tabloda daha fazla satır varsa, sadece kalan hücrelerin içeriğini temizle (fiziksel row silme yok!)
+          var lastTxRow = txSheet.getLastRow();
+          var newEndRow = startRow + txOutput2D.length - 1;
+          if (lastTxRow > newEndRow) {
+            txSheet.getRange(newEndRow + 1, 1, lastTxRow - newEndRow, txHeaders.length).clearContent();
+          }
+        } else {
+          // Yedek durum: Başlık bulunamadıysa sıfırdan oluştur
+          txHeaders = ["id", "Tarih", "Tür", "Katagori", "Alt katagori", "Tutar", "Açıklama", "Aktif-Pasif"];
+          txSheet.clearContents();
+          txSheet.getRange(1, 1, 1, txHeaders.length).setValues([txHeaders]);
+          
+          transactions.forEach(function(tx) {
+            txOutput2D.push([
+              tx.id,
+              tx.tarih,
+              tx.tur,
+              tx.kategori,
+              tx.altKategori || 'Genel',
+              tx.tutar,
+              tx.aciklama || '',
+              tx.aktifPasif || 'Aktif'
+            ]);
+          });
+          if (txOutput2D.length > 0) {
+            txSheet.getRange(2, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
+            // Tutar sütununu (index 5, sütun 6) sayı formatına zorla
+            txSheet.getRange(2, 6, txOutput2D.length, 1).setNumberFormat('0.00');
+          }
         }
       }
 
       // --- ÖDEMELERİ YAZILACAK ---
-      if (paySheet) {
+      if (paySheet && (target === "all" || target === "payments")) {
         var payRows = paySheet.getDataRange().getValues();
         var payHeaderRowIdx = -1;
         for (var rowIdx = 0; rowIdx < Math.min(payRows.length, 10); rowIdx++) {
@@ -805,11 +824,11 @@ function handleRequest(e) {
         }
 
         // OTOMATİK İYİLEŞTİRME (SELF-HEALING) - ÖDEMELER TABLOSU KAYDETME:
-        if (payHeaderRowIdx > 0) {
-          paySheet.deleteRow(1);
-          Utilities.sleep(100);
-          payRows = paySheet.getDataRange().getValues();
-          payHeaderRowIdx = payHeaderRowIdx - 1;
+        // Respect the detected header row as-is. Prevents Google Tables corruption.
+        if (payHeaderRowIdx === -1) {
+          if (paySheet.getLastRow() > 0) {
+            payHeaderRowIdx = 0;
+          }
         }
 
         var payHeaders;
@@ -826,6 +845,7 @@ function handleRequest(e) {
           var pTarihCol = findColumnIndex(payHeaders, ["sonodemetarihi", "tarih", "date"]);
           var pKateCol = findColumnIndex(payHeaders, ["kategori", "category"]);
           var pDurumCol = findColumnIndex(payHeaders, ["durum", "status"]);
+          var pActivePassiveCol = findColumnIndex(payHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
 
           payments.forEach(function(p) {
             var newRow = new Array(payHeaders.length);
@@ -837,19 +857,28 @@ function handleRequest(e) {
             if (pTarihCol !== -1) newRow[pTarihCol] = p.sonOdemeTarihi;
             if (pKateCol !== -1) newRow[pKateCol] = p.kategori;
             if (pDurumCol !== -1) newRow[pDurumCol] = p.durum || 'Bekliyor';
+            if (pActivePassiveCol !== -1) newRow[pActivePassiveCol] = p.aktifPasif || 'Aktif';
 
             payOutput2D.push(newRow);
           });
 
-          var lastPayRow = paySheet.getLastRow();
-          if (lastPayRow >= pStartRow) {
-            paySheet.getRange(pStartRow, 1, lastPayRow - pStartRow + 1, payHeaders.length).clearContent();
-          }
+          // 1. Ödemeleri doğrudan mevcut hücrelerin üzerine yaz
           if (payOutput2D.length > 0) {
             paySheet.getRange(pStartRow, 1, payOutput2D.length, payHeaders.length).setValues(payOutput2D);
+            if (pTutarCol !== -1) {
+              // Tutar sütununu SAYI formatına zorlayarak tarihe dönüşmesini kesinlikle engelliyoruz!
+              paySheet.getRange(pStartRow, pTutarCol + 1, payOutput2D.length, 1).setNumberFormat('0.00');
+            }
+          }
+
+          // 2. Eğer eski tabloda kalan fazla satırlar varsa, sadece içerikleri temizle (asla fiziksel row silme yok!)
+          var lastPayRow = paySheet.getLastRow();
+          var newPayEndRow = pStartRow + payOutput2D.length - 1;
+          if (lastPayRow > newPayEndRow) {
+            paySheet.getRange(newPayEndRow + 1, 1, lastPayRow - newPayEndRow, payHeaders.length).clearContent();
           }
         } else {
-          payHeaders = ["id", "Başlık", "Tutar", "Son Ödeme Tarihi", "Kategori", "Durum"];
+          payHeaders = ["id", "Başlık", "Tutar", "Son Ödeme Tarihi", "Kategori", "Durum", "Aktif-Pasif"];
           paySheet.clearContents();
           paySheet.getRange(1, 1, 1, payHeaders.length).setValues([payHeaders]);
 
@@ -860,11 +889,14 @@ function handleRequest(e) {
               p.tutar,
               p.sonOdemeTarihi,
               p.kategori,
-              p.durum || 'Bekliyor'
+              p.durum || 'Bekliyor',
+              p.aktifPasif || 'Aktif'
             ]);
           });
           if (payOutput2D.length > 0) {
             paySheet.getRange(2, 1, payOutput2D.length, payHeaders.length).setValues(payOutput2D);
+            // Tutar sütununu sayı formatına zorla (Tutar 3. sıradadır: index 2)
+            paySheet.getRange(2, 3, payOutput2D.length, 1).setNumberFormat('0.00');
           }
         }
       }
@@ -877,6 +909,14 @@ function handleRequest(e) {
     
   } catch(err) {
     responseData = { success: false, error: err.toString() };
+  } finally {
+    if (gotLock) {
+      try {
+        lock.releaseLock();
+      } catch(releaseErr) {
+        // ignore lock release errors
+      }
+    }
   }
   
   // CORS engellerinden kaçınmak için JSON çıktısı döndür

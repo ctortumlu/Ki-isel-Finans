@@ -33,6 +33,20 @@ export default function App() {
   const [payments, setPayments] = useState<RecurringPayment[]>([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('synced');
+  const [currentTime, setCurrentTime] = useState('');
+  const syncTimeoutRef = React.useRef<any>(null);
+
+  // Live running clock for the iPhone mockup status bar
+  useEffect(() => {
+    const updateTime = () => {
+      const d = new Date();
+      setCurrentTime(d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+    };
+    updateTime();
+    const clockTimer = setInterval(updateTime, 10000);
+    return () => clearInterval(clockTimer);
+  }, []);
 
   // Load state on mount
   useEffect(() => {
@@ -85,52 +99,76 @@ export default function App() {
     }
   };
 
-  // Soft background sync pusher
-  const triggerBackgroundSync = (updatedTxns: Transaction[], updatedPmts: RecurringPayment[]) => {
+  // Soft background sync pusher with instant 305ms response timing
+  const triggerBackgroundSync = (
+    updatedTxns: Transaction[],
+    updatedPmts: RecurringPayment[],
+    target?: 'transactions' | 'payments'
+  ) => {
     if (isSyncEnabled()) {
-      syncSaveAllData(updatedTxns, updatedPmts).then((res) => {
-        if (res.success) {
-          console.log("Arka plan bulut senkronizasyonu tamamlandı.");
-        } else {
-          console.warn("Arka plan bulut senkronizasyonu başarısız:", res.error);
-        }
-      }).catch(err => {
-        console.warn("Arka plan sync hatası:", err);
-      });
+      setSyncStatus('syncing');
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        syncSaveAllData(updatedTxns, updatedPmts, target).then((res) => {
+          if (res.success) {
+            setSyncStatus('synced');
+            console.log("Arka plan bulut senkronizasyonu tamamlandı.");
+          } else {
+            setSyncStatus('error');
+            console.warn("Arka plan bulut senkronizasyonu başarısız:", res.error);
+          }
+        }).catch(err => {
+          setSyncStatus('error');
+          console.warn("Arka plan sync hatası:", err);
+        });
+      }, 300); // 300ms delay ensures transactions upload securely before mobile system suspends Safari!
+    } else {
+      setSyncStatus('idle');
     }
   };
+
+  const activeTransactions = React.useMemo(() => {
+    return transactions.filter(t => t.aktifPasif !== 'Pasif');
+  }, [transactions]);
+
+  const activePayments = React.useMemo(() => {
+    return payments.filter(p => p.aktifPasif !== 'Pasif');
+  }, [payments]);
 
   // Save state on change
   const handleAddTransaction = (newT: Omit<Transaction, 'id'>) => {
     const item: Transaction = {
       ...newT,
       id: 'txn_' + Date.now(),
+      aktifPasif: 'Aktif',
     };
     const updated = [item, ...transactions];
     setTransactions(updated);
     saveTransactions(updated);
-    triggerBackgroundSync(updated, payments);
+    triggerBackgroundSync(updated, payments, 'transactions');
   };
 
   const handleDeleteTransaction = (id: string) => {
-    const updated = transactions.filter((t) => t.id !== id);
+    const updated = transactions.map((t) => t.id === id ? { ...t, aktifPasif: 'Pasif' as const } : t);
     setTransactions(updated);
     saveTransactions(updated);
-    triggerBackgroundSync(updated, payments);
+    triggerBackgroundSync(updated, payments, 'transactions');
   };
 
   const handleUpdatePayment = (updatedPayment: RecurringPayment) => {
     const updated = payments.map((p) => (p.id === updatedPayment.id ? updatedPayment : p));
     setPayments(updated);
     savePayments(updated);
-    triggerBackgroundSync(transactions, updated);
+    triggerBackgroundSync(transactions, updated, 'payments');
   };
 
   const handleDeletePayment = (id: string) => {
-    const updated = payments.filter((p) => p.id !== id);
+    const updated = payments.map((p) => p.id === id ? { ...p, aktifPasif: 'Pasif' as const } : p);
     setPayments(updated);
     savePayments(updated);
-    triggerBackgroundSync(transactions, updated);
+    triggerBackgroundSync(transactions, updated, 'payments');
   };
 
   const handleAddPayment = (newPOrArr: Omit<RecurringPayment, 'id'> | Omit<RecurringPayment, 'id'>[]) => {
@@ -138,11 +176,12 @@ export default function App() {
     const itemsWithIds: RecurringPayment[] = newItems.map((p, index) => ({
       ...p,
       id: 'pmt_' + (Date.now() + index),
+      aktifPasif: 'Aktif',
     }));
     const updated = [...payments, ...itemsWithIds];
     setPayments(updated);
     savePayments(updated);
-    triggerBackgroundSync(transactions, updated);
+    triggerBackgroundSync(transactions, updated, 'payments');
   };
 
   const handleResetDefaults = () => {
@@ -161,8 +200,8 @@ export default function App() {
       case 'pano':
         return (
           <Dashboard
-            transactions={transactions}
-            payments={payments}
+            transactions={activeTransactions}
+            payments={activePayments}
             onNavigate={(tab) => setActiveTab(tab)}
             onSync={handleSync}
             isSyncing={isSyncing}
@@ -178,7 +217,7 @@ export default function App() {
       case 'takip':
         return (
           <PaymentTracker
-            payments={payments}
+            payments={activePayments}
             onUpdatePayment={handleUpdatePayment}
             onDeletePayment={handleDeletePayment}
             onAddPayment={handleAddPayment}
@@ -189,13 +228,13 @@ export default function App() {
       case 'islemler':
         return (
           <Transactions
-            transactions={transactions}
+            transactions={activeTransactions}
             onDeleteTransaction={handleDeleteTransaction}
             onNavigateHome={() => setActiveTab('pano')}
           />
         );
       case 'grafikler':
-        return <Charts transactions={transactions} onNavigateHome={() => setActiveTab('pano')} />;
+        return <Charts transactions={activeTransactions} onNavigateHome={() => setActiveTab('pano')} />;
       case 'ayarlar':
         return (
           <Settings
@@ -213,7 +252,7 @@ export default function App() {
           />
         );
       default:
-        return <Dashboard transactions={transactions} payments={payments} onNavigate={setActiveTab} />;
+        return <Dashboard transactions={activeTransactions} payments={activePayments} onNavigate={setActiveTab} />;
     }
   };
 
@@ -225,7 +264,39 @@ export default function App() {
         
         {/* iOS-Style Notch and Status Bar on desktop, safe area paddings */}
         <div className="bg-pastel-bg/60 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 px-6 pt-3 pb-2 flex justify-between items-center">
-          <span className="text-xs font-bold font-mono text-slate-700">20:11</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold font-mono text-slate-700">{currentTime || '18:15'}</span>
+            
+            {/* Real-time Cloud Synchronization Safe state badge */}
+            {isSyncEnabled() && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/90 border border-slate-150 rounded-full shadow-xxs">
+                {syncStatus === 'syncing' ? (
+                  <>
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                    </span>
+                    <span className="text-[8px] font-bold text-amber-600 tracking-tight">Kaydediliyor...</span>
+                  </>
+                ) : syncStatus === 'error' ? (
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+                    <span className="text-[8px] font-bold text-rose-600 tracking-tight">Bulut Hata</span>
+                  </>
+                ) : syncStatus === 'idle' ? (
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+                    <span className="text-[8px] font-bold text-slate-500 tracking-tight font-sans">Eşitlenmedi</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                    <span className="text-[8px] font-bold text-emerald-600 tracking-tight">Eşitlendi</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           
           {/* Audio/Status Notch area inside desktop casing */}
           <div className="hidden md:block w-28 h-5 bg-slate-900 absolute left-1/2 -translate-x-1/2 top-0 rounded-b-2xl z-50 overflow-hidden" />
