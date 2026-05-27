@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, Check, Copy, FileSpreadsheet, Settings as SettingsIcon, Link, CheckCircle, 
   AlertTriangle, Plus, Trash2, Database, Sparkles, Layers, FileDown, 
-  Trash, Import, Eye, CheckSquare, FileText, ChevronRight 
+  Trash, Import, Eye, CheckSquare, FileText, ChevronRight, RefreshCw
 } from 'lucide-react';
 import { loadCustomCategories, saveCustomCategories, savePayments } from '../db';
 import { getCategoryEmoji, stripEmoji } from '../utils/emoji';
 import { SheetCategory, Transaction, RecurringPayment } from '../types';
+import { fetchExchangeRateForDate } from '../utils/usdFetcher';
 import {
   getAppsScriptUrl,
   setAppsScriptUrl,
@@ -89,6 +90,7 @@ export default function Settings({
   const [usdRate, setUsdRate] = useState<number>(34.25);
   const [isUsdEnabled, setIsUsdEnabled] = useState<boolean>(true);
   const [usdRateFetched, setUsdRateFetched] = useState<'loading' | 'success' | 'failed'>('loading');
+  const [isAutoCompletingRates, setIsAutoCompletingRates] = useState<boolean>(false);
 
   // Automatically fetch live USD/TRY rate on mount
   useEffect(() => {
@@ -175,6 +177,68 @@ export default function Settings({
     return Array.from(subs).sort((a, b) => a.localeCompare(b, 'tr'));
   }, [pdfDateFilteredTransactions, pdfTypeFilter, pdfCategoryFilter]);
 
+  const handleAutoCompleteMissingRates = async () => {
+    const targetTxns = pdfDateFilteredTransactions.filter(
+      t => t.aktifPasif !== 'Pasif' && (t.usdRate === undefined || t.usdRate === null || isNaN(t.usdRate) || t.usdRate <= 0)
+    );
+
+    if (targetTxns.length === 0) {
+      alert('Seçilen tarih aralığında eksik dolar kuru olan hiçbir işlem bulunamadı.');
+      return;
+    }
+
+    setIsAutoCompletingRates(true);
+    let successCount = 0;
+    const updatedTxns = [...transactions];
+
+    const uniqueDates: string[] = Array.from(new Set(targetTxns.map(t => t.tarih as string)));
+    const dateToRateMap: Record<string, number> = {};
+
+    try {
+      for (const date of uniqueDates) {
+        try {
+          const rate = await fetchExchangeRateForDate(date);
+          if (rate) {
+            dateToRateMap[date] = rate;
+          }
+        } catch (e) {
+          console.warn(`Could not fetch rate for date ${date}:`, e);
+        }
+      }
+
+      for (let i = 0; i < updatedTxns.length; i++) {
+        const tx = updatedTxns[i];
+        if (tx.aktifPasif !== 'Pasif' && (tx.usdRate === undefined || tx.usdRate === null || isNaN(tx.usdRate) || tx.usdRate <= 0)) {
+          if (dateToRateMap[tx.tarih]) {
+            updatedTxns[i] = { ...tx, usdRate: dateToRateMap[tx.tarih] };
+            successCount++;
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        setTransactions(updatedTxns);
+        localStorage.setItem('finance_transactions', JSON.stringify(updatedTxns));
+        
+        if (useCloudSync && appsScriptUrl) {
+          try {
+            await syncSaveAllData(updatedTxns, payments, 'transactions');
+          } catch (syncErr) {
+            console.warn('Auto completed rates but background cloud sync failed:', syncErr);
+          }
+        }
+        alert(`✓ Seçilen aralıktaki ${successCount} işlemin eksik dolar kurları başarıyla internetten çekilip güncellendi!`);
+      } else {
+        alert('Tarihsel kurlar şu an çekilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+      }
+    } catch (err: any) {
+      console.error('Error auto completing rates:', err);
+      alert('İşlem sırasında beklenmedik bir hata oluştu.');
+    } finally {
+      setIsAutoCompletingRates(false);
+    }
+  };
+
   // Combined high quality filtered summary for both real-time UI preview and PDF generation
   const reportFilteredSummary = useMemo(() => {
     let filtered = [...pdfDateFilteredTransactions];
@@ -192,22 +256,52 @@ export default function Settings({
     const expense = filtered.filter(t => t.tur === 'Gider').reduce((a, b) => a + b.tutar, 0);
     const bal = income - expense;
 
-    const incomeUsd = filtered
+    // Reference rate calculations
+    const incomeUsdRef = income / usdRate;
+    const expenseUsdRef = expense / usdRate;
+    const balanceUsdRef = bal / usdRate;
+
+    // Historical rates calculations (H column)
+    const getTxUsdRate = (tx: Transaction) => {
+      if (tx.usdRate !== undefined && tx.usdRate !== null && !isNaN(tx.usdRate) && tx.usdRate > 0) {
+        return tx.usdRate;
+      }
+      return usdRate;
+    };
+
+    const incomeUsdHist = filtered
       .filter(t => t.tur === 'Gelir')
-      .reduce((a, t) => a + (t.tutar / (t.usdRate || usdRate)), 0);
-    const expenseUsd = filtered
+      .reduce((a, t) => a + (t.tutar / getTxUsdRate(t)), 0);
+    const expenseUsdHist = filtered
       .filter(t => t.tur === 'Gider')
-      .reduce((a, t) => a + (t.tutar / (t.usdRate || usdRate)), 0);
-    const balUsd = incomeUsd - expenseUsd;
+      .reduce((a, t) => a + (t.tutar / getTxUsdRate(t)), 0);
+    const balanceUsdHist = incomeUsdHist - expenseUsdHist;
+
+    // Count missing usdRates for active filtered transactions
+    const missingUsdRateCount = filtered.filter(
+      t => t.aktifPasif !== 'Pasif' && (t.usdRate === undefined || t.usdRate === null || isNaN(t.usdRate) || t.usdRate <= 0)
+    ).length;
 
     return {
       filtered,
       income,
       expense,
       balance: bal,
-      incomeUsd,
-      expenseUsd,
-      balanceUsd: balUsd,
+      
+      // Reference-based USD sums
+      incomeUsdRef,
+      expenseUsdRef,
+      balanceUsdRef,
+
+      // Historical (H-Sütunu) based sums (Backward-compatible with standard fields in other files)
+      incomeUsd: incomeUsdHist,
+      expenseUsd: expenseUsdHist,
+      balanceUsd: balanceUsdHist,
+      
+      incomeUsdHist,
+      expenseUsdHist,
+      balanceUsdHist,
+      missingUsdRateCount,
       count: filtered.length
     };
   }, [pdfDateFilteredTransactions, pdfTypeFilter, pdfCategoryFilter, pdfSubCategoryFilter, usdRate]);
@@ -393,13 +487,29 @@ export default function Settings({
       // Clean whitespaces
       parts = parts.map(p => p.trim());
 
-      // Try parsing values: Tarih, Tür, Kategori, Alt Kategori, Tutar, Açıklama
+      // Try parsing values: Tarih, Tür, Kategori, Alt Kategori, Tutar, Açıklama, Aktif-Pasif, USD / TL
       const rawDate = parts[0] || '';
       const rawTur = parts[1] || 'Gider';
       const rawKat = parts[2] || 'Diğer';
       const rawAlt = parts[3] || 'Genel';
       const rawTutar = parts[4] || '';
       const rawAciklama = parts[5] || '';
+
+      // Smart detection for 7-column and 8-column pastes
+      let finalActivePassive = 'Aktif';
+      let finalUsdRateText = '';
+
+      if (parts.length >= 8) {
+        finalActivePassive = parts[6] || 'Aktif';
+        finalUsdRateText = parts[7] || '';
+      } else if (parts.length === 7) {
+        const val6 = (parts[6] || '').trim();
+        if (/^\d+([.,]\d+)?$/.test(val6)) {
+          finalUsdRateText = val6;
+        } else {
+          finalActivePassive = val6;
+        }
+      }
 
       // Date parsing helper
       let parsedDate = '2026-05-22'; // anchor default fallback
@@ -446,6 +556,21 @@ export default function Settings({
         numericTutar = 0;
       }
 
+      // Parse pasted USD rate column H (if any)
+      let parsedRateNum: number | undefined = undefined;
+      if (finalUsdRateText) {
+        let cleanedRate = finalUsdRateText.replace(/[^0-9,\.-]/g, '');
+        if (cleanedRate.includes('.') && cleanedRate.includes(',')) {
+          cleanedRate = cleanedRate.replace(/\./g, '').replace(/,/g, '.');
+        } else if (cleanedRate.includes(',')) {
+          cleanedRate = cleanedRate.replace(/,/g, '.');
+        }
+        const numericRate = parseFloat(cleanedRate);
+        if (!isNaN(numericRate) && numericRate > 0) {
+          parsedRateNum = numericRate;
+        }
+      }
+
       parsed.push({
         id: 'txn_imp_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now(),
         tarih: parsedDate,
@@ -453,7 +578,9 @@ export default function Settings({
         kategori: rawKat || 'Diğer',
         altKategori: rawAlt || 'Genel',
         tutar: Math.abs(numericTutar),
-        aciklama: rawAciklama || `${rawKat} İşlemi`
+        aciklama: rawAciklama || `${rawKat} İşlemi`,
+        aktifPasif: finalActivePassive.toLowerCase().trim() === 'pasif' ? 'Pasif' : 'Aktif',
+        usdRate: parsedRateNum
       });
     }
 
@@ -1982,52 +2109,120 @@ function handleRequest(e) {
             </label>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50/70 border border-slate-200/40 p-3 rounded-2xl">
-            {/* Currency Input */}
-            <div className="space-y-1">
-              <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block">USD / TL Referans Kuru</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={usdRate}
-                  onChange={(e) => setUsdRate(Math.max(0.01, parseFloat(e.target.value) || 0))}
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-extrabold"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">TRY</span>
+          <div className="bg-slate-50/70 border border-slate-200/45 p-4 rounded-2xl space-y-4">
+            {/* Control & Input Row */}
+            <div className="flex flex-col sm:flex-row gap-3 items-end justify-between">
+              {/* Currency Input */}
+              <div className="space-y-1 w-full sm:max-w-[200px]">
+                <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block">USD / TL Referans Kuru</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={usdRate}
+                    onChange={(e) => setUsdRate(Math.max(0.01, parseFloat(e.target.value) || 0))}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 font-extrabold"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">TRY</span>
+                </div>
+              </div>
+
+              {/* Self-healing Auto-complete Button */}
+              {reportFilteredSummary.missingUsdRateCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleAutoCompleteMissingRates}
+                  disabled={isAutoCompletingRates}
+                  className={`w-full sm:w-auto px-3 py-2.5 rounded-xl text-[10px] font-extrabold border border-rose-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    isAutoCompletingRates 
+                      ? 'bg-amber-50 text-amber-600 animate-pulse border-amber-200' 
+                      : 'bg-rose-50/70 hover:bg-rose-50 text-rose-700 hover:border-rose-300 shadow-2xs'
+                  }`}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-rose-700 ${isAutoCompletingRates ? 'animate-spin' : ''}`} />
+                  {isAutoCompletingRates 
+                    ? 'Kurlar Tamamlanıyor...' 
+                    : `Cihazda Eksik ${reportFilteredSummary.missingUsdRateCount} Kur Değerini İnternetten Çek`}
+                </button>
+              )}
+            </div>
+
+            {/* Row 1: GÜNCEL HESAP (Referans Kuruna Bölünmüş TL Toplamları) */}
+            <div className="space-y-1.5">
+              <span className="text-[9px] font-bold text-slate-450 uppercase tracking-widest block px-1">
+                SEÇİLEN REFERANS KURA GÖRE DEĞERLENDİRME (1 USD = {usdRate.toFixed(2)} TL)
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 bg-white border border-slate-200/70 rounded-xl flex flex-col justify-center shadow-3xs hover:border-emerald-200 transition-colors">
+                  <span className="text-[8.5px] font-bold text-slate-550 uppercase tracking-wider">GELİR ($)</span>
+                  <span className="text-[11px] font-bold text-slate-800 mt-1 truncate">
+                    {(reportFilteredSummary.income).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} TL
+                  </span>
+                  <span className="text-[10px] font-black text-emerald-600 font-mono leading-none mt-1">
+                    ${(reportFilteredSummary.incomeUsdRef).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="p-2.5 bg-white border border-slate-200/70 rounded-xl flex flex-col justify-center shadow-3xs hover:border-rose-200 transition-colors">
+                  <span className="text-[8.5px] font-bold text-slate-550 uppercase tracking-wider">GİDER ($)</span>
+                  <span className="text-[11px] font-bold text-slate-800 mt-1 truncate">
+                    {(reportFilteredSummary.expense).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} TL
+                  </span>
+                  <span className="text-[10px] font-black text-rose-600 font-mono leading-none mt-1">
+                    ${(reportFilteredSummary.expenseUsdRef).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="p-2.5 bg-white border border-slate-200/70 rounded-xl flex flex-col justify-center shadow-3xs hover:border-indigo-200 transition-colors">
+                  <span className="text-[8.5px] font-bold text-slate-550 uppercase tracking-wider">NET DURUM</span>
+                  <span className="text-[11px] font-bold text-slate-800 mt-1 truncate">
+                    {(reportFilteredSummary.balance >= 0 ? '+' : '')}{(reportFilteredSummary.balance).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} TL
+                  </span>
+                  <span className={`text-[10px] font-black font-mono leading-none mt-1 ${reportFilteredSummary.balanceUsdRef >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                    {(reportFilteredSummary.balanceUsdRef >= 0 ? '+' : '')}${(reportFilteredSummary.balanceUsdRef).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Calculations summaries on-screen */}
-            <div className="md:col-span-3 grid grid-cols-3 gap-2">
-              <div className="p-2 bg-emerald-50/40 border border-emerald-100/30 rounded-xl flex flex-col justify-center">
-                <span className="text-[8.5px] font-bold text-emerald-700 uppercase tracking-wider">GELİR ($)</span>
-                <span className="text-[11px] font-bold text-slate-800 mt-1 truncate">
-                  {(reportFilteredSummary.income).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} TL
-                </span>
-                <span className="text-[9.5px] font-bold text-emerald-600 font-mono leading-none mt-0.5">
-                  ${(reportFilteredSummary.incomeUsd).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
-                </span>
-              </div>
+            {/* Row 2: TARİHİ HESAP (İşlem Günlerindeki Gerçek Kurların - H Sütunununun Toplamı) */}
+            <div className="space-y-1.5 border-t border-slate-200/60 pt-3">
+              <span className="text-[9px] font-bold text-slate-450 uppercase tracking-widest block px-1 flex justify-between items-center">
+                <span>TARİHİ KURLARA GÖRE REALİZE DEĞERLER (GERÇEK USD - H SÜTUNU)</span>
+                {reportFilteredSummary.missingUsdRateCount === 0 && (
+                  <span className="text-[8.5px] text-emerald-600 font-bold font-sans">✓ %100 Gerçek Kur</span>
+                )}
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 bg-emerald-50/20 border border-emerald-100 rounded-xl flex flex-col justify-center shadow-3xs">
+                  <span className="text-[8.5px] font-bold text-emerald-800 uppercase tracking-wider font-sans">TARİHİ GELİR</span>
+                  <span className="text-[10px] font-bold text-slate-500 mt-1 truncate">
+                    Fiili Toplam
+                  </span>
+                  <span className="text-[10.5px] font-black text-emerald-700 font-mono leading-none mt-1">
+                    ${(reportFilteredSummary.incomeUsdHist).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
 
-              <div className="p-2 bg-rose-50/40 border border-rose-100/30 rounded-xl flex flex-col justify-center">
-                <span className="text-[8.5px] font-bold text-rose-700 uppercase tracking-wider">GİDER ($)</span>
-                <span className="text-[11px] font-bold text-slate-800 mt-1 truncate">
-                  {(reportFilteredSummary.expense).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} TL
-                </span>
-                <span className="text-[9.5px] font-bold text-rose-600 font-mono leading-none mt-0.5">
-                  ${(reportFilteredSummary.expenseUsd).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
-                </span>
-              </div>
+                <div className="p-2.5 bg-rose-50/20 border border-rose-100 rounded-xl flex flex-col justify-center shadow-3xs">
+                  <span className="text-[8.5px] font-bold text-rose-800 uppercase tracking-wider font-sans">TARİHİ GİDER</span>
+                  <span className="text-[10px] font-bold text-slate-500 mt-1 truncate">
+                    Fiili Toplam
+                  </span>
+                  <span className="text-[10.5px] font-black text-rose-700 font-mono leading-none mt-1">
+                    ${(reportFilteredSummary.expenseUsdHist).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
 
-              <div className="p-2 bg-slate-100/70 border border-slate-200 rounded-xl flex flex-col justify-center">
-                <span className="text-[8.5px] font-bold text-slate-600 uppercase tracking-wider">NET DURUM</span>
-                <span className="text-[11px] font-bold text-slate-800 mt-1 truncate">
-                  {(reportFilteredSummary.balance >= 0 ? '+' : '')}{(reportFilteredSummary.balance).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} TL
-                </span>
-                <span className={`text-[9.5px] font-bold font-mono leading-none mt-0.5 ${reportFilteredSummary.balanceUsd >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                  {(reportFilteredSummary.balanceUsd >= 0 ? '+' : '')}${(reportFilteredSummary.balanceUsd).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
-                </span>
+                <div className="p-2.5 bg-indigo-50/20 border border-indigo-150 rounded-xl flex flex-col justify-center shadow-3xs">
+                  <span className="text-[8.5px] font-bold text-indigo-900 uppercase tracking-wider font-sans">TARİHİ NET</span>
+                  <span className="text-[10px] font-bold text-slate-500 mt-1 truncate">
+                    Gerçek Bakiye
+                  </span>
+                  <span className={`text-[10.5px] font-black font-mono leading-none mt-1 ${reportFilteredSummary.balanceUsdHist >= 0 ? 'text-indigo-750' : 'text-rose-750'}`}>
+                    {(reportFilteredSummary.balanceUsdHist >= 0 ? '+' : '')}${(reportFilteredSummary.balanceUsdHist).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
