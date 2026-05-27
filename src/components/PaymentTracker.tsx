@@ -5,6 +5,7 @@ import { getDaysRemaining, loadCustomCategories } from '../db';
 import { Calendar, Edit3, Check, Trash2, Plus, ArrowLeft, RefreshCw, Layers } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { getCategoryEmoji } from '../utils/emoji';
+import { fetchExchangeRateForDate } from '../utils/usdFetcher';
 
 interface PaymentTrackerProps {
   payments: RecurringPayment[];
@@ -54,6 +55,24 @@ export default function PaymentTracker({
   const [targetIdToDelete, setTargetIdToDelete] = useState<string | null>(null);
   const [targetNameToDelete, setTargetNameToDelete] = useState('');
   const [isFormCancelConfirmOpen, setIsFormCancelConfirmOpen] = useState(false);
+
+  // Pre-fetched live exchange rate for bills paid during the current session
+  const [liveUsdRate, setLiveUsdRate] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    let active = true;
+    const todayStr = new Date().toISOString().split('T')[0];
+    fetchExchangeRateForDate(todayStr).then((rate) => {
+      if (rate && active) {
+        setLiveUsdRate(rate);
+      }
+    }).catch((err) => {
+      console.warn('Could not pre-fetch current date exchange rate inside PaymentTracker:', err);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -310,7 +329,8 @@ export default function PaymentTracker({
       kategori: payTargetPayment.kategori || 'Fatura',
       altKategori: payTargetPayment.baslik || 'Genel',
       tutar: payTargetPayment.tutar,
-      aciklama: `${payTargetPayment.baslik} Ödemesi`
+      aciklama: `${payTargetPayment.baslik} Ödemesi`,
+      usdRate: liveUsdRate
     }, {
       ...payTargetPayment,
       durum: 'Odendi',

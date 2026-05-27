@@ -298,9 +298,16 @@ export default function Transactions({
 
                   {/* Right Price block & Action button */}
                   <div className="flex items-center gap-2.5 shrink-0">
-                    <span className={`text-[12.5px] font-mono font-black ${isGelir ? 'text-emerald-600' : 'text-slate-900'}`}>
-                      {isGelir ? '+' : '-'} {formatCurrency(t.tutar)}
-                    </span>
+                    <div className="text-right flex flex-col items-end leading-tight">
+                      <span className={`text-[12.5px] font-mono font-black ${isGelir ? 'text-emerald-600' : 'text-slate-900'}`}>
+                        {isGelir ? '+' : '-'} {formatCurrency(t.tutar)}
+                      </span>
+                      {t.usdRate && (
+                        <span className="text-[9.5px] text-slate-400 font-mono tracking-tight leading-none mt-0.5" title={`Kur: ${t.usdRate} TL`}>
+                          {isGelir ? '+' : '-'}${parseFloat((t.tutar / t.usdRate).toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                        </span>
+                      )}
+                    </div>
                     
                     <button
                       onClick={() => promptDeleteTransaction(t.id, t.aciklama)}

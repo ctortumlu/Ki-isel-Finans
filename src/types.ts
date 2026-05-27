@@ -9,6 +9,7 @@ export interface Transaction {
   tutar: number;
   aciklama: string;
   aktifPasif?: 'Aktif' | 'Pasif';
+  usdRate?: number;
   faturaFile?: {
     name: string;
     size: string;

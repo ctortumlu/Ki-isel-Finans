@@ -4,6 +4,7 @@ import { Transaction, INITIAL_SHEET_CATEGORIES, SheetCategory } from '../types';
 import { getReferenceDate, loadCustomCategories } from '../db';
 import { Calendar, FileText, ArrowLeft, Layers } from 'lucide-react';
 import { getCategoryEmoji, stripEmoji } from '../utils/emoji';
+import { fetchExchangeRateForDate } from '../utils/usdFetcher';
 
 interface QuickRecordProps {
   onSave: (transaction: Omit<Transaction, 'id'>) => void;
@@ -20,6 +21,35 @@ export default function QuickRecord({ onSave, onNavigateHome }: QuickRecordProps
   const [tutar, setTutar] = useState('');
   const [aciklama, setAciklama] = useState('');
   const [isTutarFocused, setIsTutarFocused] = useState(false);
+  
+  // Exchange rate configuration states inside Form
+  const [usdRateValue, setUsdRateValue] = useState<string>('');
+  const [usdRateStatus, setUsdRateStatus] = useState<'fetching' | 'success' | 'failed' | 'manual'>('fetching');
+
+  // Trigger auto rate fetch whenever date decreases/increases
+  useEffect(() => {
+    let active = true;
+    setUsdRateStatus('fetching');
+
+    fetchExchangeRateForDate(tarih).then((rate) => {
+      if (!active) return;
+      if (rate) {
+        setUsdRateValue(rate.toFixed(4));
+        setUsdRateStatus('success');
+      } else {
+        setUsdRateValue('34.25');
+        setUsdRateStatus('failed');
+      }
+    }).catch(() => {
+      if (!active) return;
+      setUsdRateValue('34.25');
+      setUsdRateStatus('failed');
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [tarih]);
   
   // Custom states for dynamic category mapping
   const [sheetCategories, setSheetCategories] = useState<SheetCategory[]>(INITIAL_SHEET_CATEGORIES);
@@ -111,7 +141,8 @@ export default function QuickRecord({ onSave, onNavigateHome }: QuickRecordProps
       altKategori,
       tutar: Number(tutar),
       aciklama: desc,
-      faturaFile: undefined
+      faturaFile: undefined,
+      usdRate: usdRateValue ? parseFloat(usdRateValue) : undefined
     });
 
     setShowSuccessModal(true);
@@ -124,6 +155,8 @@ export default function QuickRecord({ onSave, onNavigateHome }: QuickRecordProps
     setAltKategori('');
     setTur('Gider');
     setTarih(todayStr);
+    setUsdRateValue('');
+    setUsdRateStatus('fetching');
     setShowSuccessModal(false);
   };
 
@@ -239,6 +272,46 @@ export default function QuickRecord({ onSave, onNavigateHome }: QuickRecordProps
                 }`}
               />
             </div>
+          </div>
+        </div>
+
+        {/* Dolar Kuru (USD/TRY) Sadece İstenildiğinde Manuel Değiştirilebilen Bölüm */}
+        <div className="space-y-1.5 bg-white p-4 rounded-2xl border border-slate-300 shadow-xs">
+          <div className="flex justify-between items-center px-1">
+            <label className="text-[11.5px] font-bold uppercase tracking-wider text-slate-700 block">
+              Dolar Kuru (USD/TRY)
+            </label>
+            <span className={`text-[9.5px] font-bold font-mono px-2 py-0.5 rounded-full ${
+              usdRateStatus === 'fetching' ? 'bg-amber-50 text-amber-600 animate-pulse' :
+              usdRateStatus === 'success' ? 'bg-emerald-50 text-emerald-600' :
+              usdRateStatus === 'manual' ? 'bg-indigo-50 text-indigo-600 font-bold' :
+              'bg-slate-100 text-slate-500'
+            }`}>
+              {usdRateStatus === 'fetching' ? '⏳ Sorgulanıyor...' :
+               usdRateStatus === 'success' ? '✓ Otomatik Kur' :
+               usdRateStatus === 'manual' ? '✍️ Elle Değiştirildi' :
+               '⏱️ Sabit Kur'}
+            </span>
+          </div>
+          <div className="relative">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">$</span>
+            <input
+              type="number"
+              step="0.0001"
+              id="input-hizli-kayit-dolar-kuru"
+              value={usdRateValue}
+              onChange={(e) => {
+                setUsdRateValue(e.target.value);
+                setUsdRateStatus('manual');
+              }}
+              className="w-full h-[52px] pl-8 pr-16 text-xs font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-2xl shadow-xs focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
+              placeholder="34.25"
+            />
+            {usdRateValue && (
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10.5px] font-mono text-slate-400 font-bold">
+                TRY
+              </span>
+            )}
           </div>
         </div>
 
@@ -384,6 +457,20 @@ export default function QuickRecord({ onSave, onNavigateHome }: QuickRecordProps
                   <span className="text-slate-400">Tutar:</span>
                   <span className="text-slate-800 font-bold">{Number(tutar).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
                 </div>
+                {usdRateValue && parseFloat(usdRateValue) > 0 && (
+                  <>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 bg-emerald-50/20 px-1 rounded-xs">
+                      <span className="text-emerald-600 font-semibold">USD Değeri:</span>
+                      <span className="text-emerald-700 font-bold">
+                        ${(Number(tutar) / parseFloat(usdRateValue)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 text-[10px]">
+                      <span className="text-slate-400">Kaydedilen Kur:</span>
+                      <span className="text-slate-500 font-bold">{parseFloat(usdRateValue).toFixed(4)} TL</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between py-0.5">
                   <span className="text-slate-400">Açıklama:</span>
                   <span className="text-slate-800 truncate max-w-[140px] font-sans font-medium">{aciklama || altKategori}</span>

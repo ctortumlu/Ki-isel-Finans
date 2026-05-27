@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Transaction, RecurringPayment } from '../types';
 import { getDaysRemaining } from '../db';
@@ -22,12 +22,34 @@ export default function Dashboard({
   onSync,
   isSyncing = false
 }: DashboardProps) {
-  // Compute aggregates
-  const totalIncome = transactions
+  const [timeframe, setTimeframe] = useState<'Aylık' | 'Yıllık' | 'Tümü'>('Aylık');
+
+  // Filter transactions based on selected timeframe for KPI calculation
+  const filteredTxns = useMemo(() => {
+    const today = new Date();
+    let startLimit = new Date(1970, 0, 1);
+    let endLimit = new Date(2100, 11, 31);
+
+    if (timeframe === 'Aylık') {
+      startLimit = new Date(today.getFullYear(), today.getMonth(), 1);
+      endLimit = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+    } else if (timeframe === 'Yıllık') {
+      startLimit = new Date(today.getFullYear(), 0, 1);
+      endLimit = new Date(today.getFullYear(), 11, 31, 23, 59, 59);
+    }
+
+    return transactions.filter((t) => {
+      const tDate = new Date(t.tarih);
+      return tDate >= startLimit && tDate <= endLimit;
+    });
+  }, [transactions, timeframe]);
+
+  // Compute aggregates based on the selected timeframe
+  const totalIncome = filteredTxns
     .filter((t) => t.tur === 'Gelir')
     .reduce((sum, t) => sum + t.tutar, 0);
 
-  const totalExpense = transactions
+  const totalExpense = filteredTxns
     .filter((t) => t.tur === 'Gider')
     .reduce((sum, t) => sum + t.tutar, 0);
 
@@ -59,7 +81,6 @@ export default function Dashboard({
       <div className="flex justify-between items-center px-1">
         <div>
           <p className="text-xs font-mono text-slate-500 uppercase tracking-wider">Hoş Geldiniz 👋</p>
-          <h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">Merhaba, {userName}</h2>
         </div>
         
         {/* Action Buttons: Sync & Alert */}
@@ -91,6 +112,28 @@ export default function Dashboard({
             )}
           </button>
         </div>
+      </div>
+
+      {/* Timeframe Selector Button Row */}
+      <div className="bg-slate-100/70 border border-slate-200/50 p-1 rounded-2xl grid grid-cols-3 gap-1">
+        {[
+          { id: 'Aylık', label: 'Aylık' },
+          { id: 'Yıllık', label: 'Yıllık' },
+          { id: 'Tümü', label: 'Tümü' }
+        ].map((btn) => (
+          <button
+            key={btn.id}
+            type="button"
+            onClick={() => setTimeframe(btn.id as any)}
+            className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
+              timeframe === btn.id
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/40 bg-transparent'
+            }`}
+          >
+            {btn.label}
+          </button>
+        ))}
       </div>
 
       {/* Net Balance Master Card */}
@@ -191,51 +234,6 @@ export default function Dashboard({
         </motion.div>
       )}
 
-      {/* Recent Activities Snapshot */}
-      <div className="space-y-3">
-        <div className="flex justify-between items-center px-1">
-          <h3 className="text-[11.5px] font-bold uppercase tracking-wider text-slate-700">Son İşlemler</h3>
-          <button 
-            onClick={() => onNavigate('islemler')}
-            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
-          >
-            Tümünü Gör <ArrowUpRight className="w-3" />
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          {transactions.slice(0, 3).map((item) => {
-            const isGelir = item.tur === 'Gelir';
-            return (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-3.5 bg-white rounded-2xl shadow-xs border border-slate-300 hover:border-indigo-200 transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`text-xl p-2 rounded-xl flex items-center justify-center border ${
-                    isGelir 
-                      ? 'bg-emerald-50 border-emerald-200/50' 
-                      : 'bg-rose-50 border-rose-200/50'
-                  }`}>
-                    {getCategoryEmoji(item.kategori, item.altKategori, item.aciklama)}
-                  </span>
-                  <div>
-                    <p className="text-xs font-bold text-slate-800">
-                      {item.aciklama?.trim() && item.aciklama !== "undefined"
-                        ? item.aciklama
-                        : (item.altKategori && item.altKategori !== 'Genel' ? item.altKategori : item.kategori)}
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-bold font-mono mt-0.5">{item.tarih} • {item.kategori}</p>
-                  </div>
-                </div>
-                <span className={`text-xs font-extrabold font-mono ${isGelir ? 'text-emerald-700' : 'text-slate-900'}`}>
-                  {isGelir ? '+' : '-'} {formatCurrency(item.tutar)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

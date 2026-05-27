@@ -17,6 +17,7 @@ import {
 } from './sheetsSync';
 
 // Components import
+import { fetchExchangeRateForDate } from './utils/usdFetcher';
 import Dashboard from './components/Dashboard';
 import QuickRecord from './components/QuickRecord';
 import PaymentTracker from './components/PaymentTracker';
@@ -139,15 +140,32 @@ export default function App() {
 
   // Save state on change
   const handleAddTransaction = (newT: Omit<Transaction, 'id'>) => {
+    const id = 'txn_' + Date.now();
     const item: Transaction = {
       ...newT,
-      id: 'txn_' + Date.now(),
+      id,
       aktifPasif: 'Aktif',
     };
     const updated = [item, ...transactions];
     setTransactions(updated);
     saveTransactions(updated);
     triggerBackgroundSync(updated, payments, 'transactions');
+
+    // Asynchronously fetch that day's exchange rate ONLY if it is not already specified!
+    if (newT.usdRate === undefined || newT.usdRate === null) {
+      fetchExchangeRateForDate(newT.tarih).then((rate) => {
+        if (rate) {
+          setTransactions((prev) => {
+            const next = prev.map((t) => t.id === id ? { ...t, usdRate: rate } : t);
+            saveTransactions(next);
+            triggerBackgroundSync(next, payments, 'transactions');
+            return next;
+          });
+        }
+      }).catch((err) => {
+        console.warn('Could not auto fetch currency dynamic exchange rating:', err);
+      });
+    }
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -165,9 +183,10 @@ export default function App() {
   };
 
   const handlePayPayment = (newT: Omit<Transaction, 'id'>, updatedPayment: RecurringPayment) => {
+    const id = 'txn_' + Date.now();
     const item: Transaction = {
       ...newT,
-      id: 'txn_' + Date.now(),
+      id,
       aktifPasif: 'Aktif',
     };
     const updatedTxns = [item, ...transactions];
@@ -179,6 +198,22 @@ export default function App() {
     savePayments(updatedPmts);
 
     triggerBackgroundSync(updatedTxns, updatedPmts, 'all');
+
+    // Asynchronously fetch that day's exchange rate ONLY if it is not already specified!
+    if (newT.usdRate === undefined || newT.usdRate === null) {
+      fetchExchangeRateForDate(newT.tarih).then((rate) => {
+        if (rate) {
+          setTransactions((prev) => {
+            const next = prev.map((t) => t.id === id ? { ...t, usdRate: rate } : t);
+            saveTransactions(next);
+            triggerBackgroundSync(next, updatedPmts, 'all');
+            return next;
+          });
+        }
+      }).catch((err) => {
+        console.warn('Could not auto fetch currency dynamic exchange rating for paid payment:', err);
+      });
+    }
   };
 
   const handleDeletePayment = (id: string) => {
