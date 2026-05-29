@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RecurringPayment, SheetCategory, Transaction } from '../types';
 import { getDaysRemaining, loadCustomCategories } from '../db';
-import { Calendar, Edit3, Check, Trash2, Plus, ArrowLeft, RefreshCw, Layers } from 'lucide-react';
+import { Calendar, Edit3, Check, Trash2, Plus, ArrowLeft, RefreshCw, Layers, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { getCategoryEmoji } from '../utils/emoji';
 import { fetchExchangeRateForDate } from '../utils/usdFetcher';
@@ -228,11 +228,11 @@ export default function PaymentTracker({
   };
 
   const formatCurrency = (val: number) => {
-    if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
+    if (val === undefined || val === null || isNaN(val)) return '0,00\u00a0₺';
     return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }) + ' ₺';
+    }) + '\u00a0₺';
   };
 
   // Sort: Pending payments sorted by due date ascending (closest first), followed by Paid payments
@@ -375,56 +375,49 @@ export default function PaymentTracker({
         </button>
       </div>
 
-      {/* 3 KPIs Dashboard Panel */}
-      <div className="grid grid-cols-3 gap-2 md:gap-3 text-sans">
-        {/* Overdue Card */}
-        <div className="p-3 bg-rose-50 border border-rose-200/60 rounded-2xl flex flex-col justify-between shadow-3xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[9px] font-extrabold text-rose-850 uppercase tracking-widest">GÜNÜ GEÇMİŞ</span>
-            <div className="w-5 h-5 rounded-full bg-rose-100 flex items-center justify-center text-rose-700">
-              <span className="text-xs font-bold font-mono">!</span>
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <span className="text-sm md:text-base font-black font-mono text-rose-950 leading-none">
-              {formatCurrency(overdueTotal)}
-            </span>
-            <p className="text-[8.5px] text-rose-700/80 font-bold mt-0.5">Ödemesi gecikmiş</p>
-          </div>
-        </div>
+      {/* Consolidated Master Card - Magic Touch Style */}
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mobile-card p-5 bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 border border-indigo-950 text-white rounded-[26px] shadow-lg relative overflow-hidden"
+      >
+        {/* Ambient glowing circles */}
+        <div className="absolute -left-12 -top-12 w-28 h-28 rounded-full bg-rose-500/15 blur-2xl pointer-events-none" />
+        <div className="absolute -right-12 -bottom-12 w-32 h-32 rounded-full bg-indigo-500/25 blur-2xl pointer-events-none" />
 
-        {/* Regular Pending Card */}
-        <div className="p-3 bg-amber-50 border border-amber-200/60 rounded-2xl flex flex-col justify-between shadow-3xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[9px] font-extrabold text-amber-850 uppercase tracking-widest font-sans">BEKLEYENLER</span>
-            <div className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
-              <span className="text-xs">⏳</span>
+        <div className="flex flex-col items-center relative z-10 w-full text-sans">
+          
+          {/* Top Section: side-by-side columns for Gecikmiş and Bekleyen */}
+          <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-4 w-full text-center">
+            <div className="flex flex-col items-center justify-center border-r border-white/10">
+              <span className="text-[10px] text-rose-300 font-extrabold uppercase tracking-widest flex items-center justify-center gap-1.5 leading-none">
+                <span className={`w-2 h-2 rounded-full bg-rose-500 ${overdueTotal > 0 ? 'animate-pulse' : ''}`} /> Gecikmiş
+              </span>
+              <h3 className="text-sm xs:text-base font-black font-mono text-rose-400 mt-2 truncate max-w-full px-1">
+                {formatCurrency(overdueTotal)}
+              </h3>
             </div>
-          </div>
-          <div className="mt-2.5">
-            <span className="text-sm md:text-base font-black font-mono text-amber-950 leading-none">
-              {formatCurrency(pendingTotal)}
-            </span>
-            <p className="text-[8.5px] text-amber-700/80 font-bold mt-0.5">YAKLAŞANLAR</p>
-          </div>
-        </div>
 
-        {/* Grand Total Card */}
-        <div className="p-2.5 md:p-3 bg-indigo-50 border border-indigo-200/60 rounded-2xl flex flex-col justify-between shadow-3xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[9px] font-extrabold text-indigo-850 uppercase tracking-widest font-sans">GENEL TOPLAM</span>
-            <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700">
-              <span className="text-xs">💳</span>
+            <div className="flex flex-col items-center justify-center">
+              <span className="text-[10px] text-amber-300 font-extrabold uppercase tracking-widest flex items-center justify-center gap-1.5 leading-none">
+                <span className="w-2 h-2 rounded-full bg-amber-500" /> Bekleyen
+              </span>
+              <h3 className="text-sm xs:text-base font-black font-mono text-amber-400 mt-2 truncate max-w-full px-1">
+                {formatCurrency(pendingTotal)}
+              </h3>
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-sm md:text-base font-black font-mono text-indigo-950 leading-none">
+
+          {/* Bottom Section: Centered Genel Toplam Borç Yükü */}
+          <div className="pt-4 flex flex-col items-center justify-center w-full text-center">
+            <span className="text-[10px] font-extrabold text-indigo-200/60 uppercase tracking-widest block leading-none">GENEL TOPLAM BORÇ YÜKÜ</span>
+            <h1 className="text-xl sm:text-2xl font-display font-black tracking-tight mt-2 font-mono text-white truncate max-w-full px-2">
               {formatCurrency(grandTotal)}
-            </span>
-            <p className="text-[8.5px] text-indigo-700/80 font-bold mt-0.5 font-sans">Toplam borç yükü</p>
+            </h1>
           </div>
+
         </div>
-      </div>
+      </motion.div>
 
       {/* Add Recurring Payment Collapsible Form */}
       <AnimatePresence>
