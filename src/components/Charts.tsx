@@ -11,11 +11,12 @@ import { getCategoryEmoji } from '../utils/emoji';
 interface ChartsProps {
   transactions: Transaction[];
   onNavigateHome: () => void;
+  hideSensitiveData?: boolean;
 }
 
 type DateRangeType = 'bu_ay' | 'bu_yil' | 'tum_zamanlar' | 'ozel';
 
-export default function Charts({ transactions, onNavigateHome }: ChartsProps) {
+export default function Charts({ transactions, onNavigateHome, hideSensitiveData = false }: ChartsProps) {
   // Filter States
   const [dateRangeType, setDateRangeType] = useState<DateRangeType>('bu_ay');
   const [startDate, setStartDate] = useState<string>(() => {
@@ -38,6 +39,7 @@ export default function Charts({ transactions, onNavigateHome }: ChartsProps) {
 
   // Currencies formatting helper
   const formatCurrency = (val: number) => {
+    if (hideSensitiveData) return '•••• ₺';
     if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
     return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,

@@ -27,13 +27,23 @@ import Settings from './components/Settings';
 import LockScreen from './components/LockScreen';
 
 // Icons for Tab Bar
-import { Home, CalendarClock, Receipt, Percent, FileCode2, Wifi, BatteryMedium, Signal, Settings as SettingsIcon, BarChart3 } from 'lucide-react';
+import { Home, CalendarClock, Receipt, Percent, FileCode2, Wifi, BatteryMedium, Signal, Settings as SettingsIcon, BarChart3, Eye, EyeOff } from 'lucide-react';
 
 export default function App() {
   const [isLocked, setIsLocked] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('pano');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [payments, setPayments] = useState<RecurringPayment[]>([]);
+
+  // Hassas veri gizleme (Göz simgesi)
+  const [isSensitiveHidden, setIsSensitiveHidden] = useState<boolean>(() => {
+    return localStorage.getItem('finance_sensitive_hidden') === 'true';
+  });
+
+  // Otomatik kilit mekanizması
+  const [autoLockDelay, setAutoLockDelay] = useState<string>(() => {
+    return localStorage.getItem('finance_auto_lock_delay') || 'Kapalı';
+  });
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('synced');
@@ -76,6 +86,52 @@ export default function App() {
       });
     }
   }, []);
+
+  // Otomatik ekran kilitleme (Inactivity & Tab Switcher auto-locking)
+  useEffect(() => {
+    const pinExists = localStorage.getItem('finance_app_password');
+    if (isLocked || !pinExists || autoLockDelay === 'Kapalı') return;
+
+    let delayMs = 120000; // 2 dk
+    if (autoLockDelay === '30sn') delayMs = 30000;
+    else if (autoLockDelay === '1dk') delayMs = 60000;
+    else if (autoLockDelay === '2dk') delayMs = 120000;
+    else if (autoLockDelay === '5dk') delayMs = 300000;
+
+    let timeoutId: any;
+
+    const lockAppSecured = () => {
+      setIsLocked(true);
+    };
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(lockAppSecured, delayMs);
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    events.forEach(name => {
+      window.addEventListener(name, resetTimer);
+    });
+
+    // Sekme gizlendiğinde fırlayacak anlık kilit koruması (Ultra bakiye güvenliği)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        lockAppSecured();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(name => {
+        window.removeEventListener(name, resetTimer);
+      });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isLocked, autoLockDelay]);
 
   const handleSync = async () => {
     if (!isSyncEnabled()) {
@@ -259,6 +315,7 @@ export default function App() {
             onNavigate={(tab) => setActiveTab(tab)}
             onSync={handleSync}
             isSyncing={isSyncing}
+            hideSensitiveData={isSensitiveHidden}
           />
         );
       case 'kayit':
@@ -278,6 +335,7 @@ export default function App() {
             onNavigateHome={() => setActiveTab('pano')}
             onAddTransaction={handleAddTransaction}
             onPayPayment={handlePayPayment}
+            hideSensitiveData={isSensitiveHidden}
           />
         );
       case 'islemler':
@@ -286,10 +344,11 @@ export default function App() {
             transactions={activeTransactions}
             onDeleteTransaction={handleDeleteTransaction}
             onNavigateHome={() => setActiveTab('pano')}
+            hideSensitiveData={isSensitiveHidden}
           />
         );
       case 'grafikler':
-        return <Charts transactions={activeTransactions} onNavigateHome={() => setActiveTab('pano')} />;
+        return <Charts transactions={activeTransactions} onNavigateHome={() => setActiveTab('pano')} hideSensitiveData={isSensitiveHidden} />;
       case 'ayarlar':
         return (
           <Settings
@@ -304,10 +363,15 @@ export default function App() {
               savePayments(updatedPmts);
             }}
             onNavigateHome={() => setActiveTab('pano')}
+            autoLockDelay={autoLockDelay}
+            onChangeAutoLockDelay={(val) => {
+              localStorage.setItem('finance_auto_lock_delay', val);
+              setAutoLockDelay(val);
+            }}
           />
         );
       default:
-        return <Dashboard transactions={activeTransactions} payments={activePayments} onNavigate={setActiveTab} />;
+        return <Dashboard transactions={activeTransactions} payments={activePayments} onNavigate={setActiveTab} hideSensitiveData={isSensitiveHidden} />;
     }
   };
 
@@ -328,6 +392,24 @@ export default function App() {
         <div className="bg-pastel-bg/60 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 px-6 pt-3 pb-2 flex justify-between items-center">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-bold font-mono text-slate-700">{currentTime || '18:15'}</span>
+            
+            {/* Sensitive Data (Privacy) Masking eye button */}
+            <motion.button
+              whileTap={{ scale: 0.82 }}
+              onClick={() => setIsSensitiveHidden(prev => {
+                const newVal = !prev;
+                localStorage.setItem('finance_sensitive_hidden', String(newVal));
+                return newVal;
+              })}
+              title={isSensitiveHidden ? "Miktarları Göster" : "Miktarları Gizle"}
+              className="p-1 hover:bg-slate-200/60 rounded-lg text-slate-500 hover:text-indigo-650 transition-colors ml-1 cursor-pointer"
+            >
+              {isSensitiveHidden ? (
+                <EyeOff className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+              ) : (
+                <Eye className="w-3.5 h-3.5 text-slate-500" />
+              )}
+            </motion.button>
             
             {/* Real-time Cloud Synchronization Safe state badge */}
             {isSyncEnabled() && (
@@ -391,12 +473,13 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        {/* Floating Quick Reset is removed and accessible from Ayarlar tab to prevent overlaps         {/* Beautiful Sticky Tab Navigation Menu with 22px oval rounded styling (Physical Flex row child to prevent mobile viewport leaks) */}
+        {/* Beautiful Sticky Tab Navigation Menu with 22px oval rounded styling (Physical Flex row child to prevent mobile viewport leaks) */}
         <div className="bg-white border-t border-slate-100/80 p-3 shrink-0 z-40">
           <div className="bg-slate-50 border border-slate-200/50 rounded-2xl p-1.5 flex justify-between items-center tab-bar-shadow gap-0.5">
             
             {/* Tab 1: Pano (Dashboard) */}
-            <button
+            <motion.button
+              whileTap={{ scale: 0.90 }}
               onClick={() => setActiveTab('pano')}
               className={`flex-1 py-1 flex flex-col items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'pano'
@@ -406,10 +489,11 @@ export default function App() {
             >
               <Home className={`w-4 h-4 ${activeTab === 'pano' ? 'text-indigo-600 scale-110 fill-indigo-50/50' : ''}`} />
               <span className="text-[8.5px] font-bold font-sans mt-0.5">Pano</span>
-            </button>
+            </motion.button>
 
             {/* Tab 2: Kayıt (Quick Form) */}
-            <button
+            <motion.button
+              whileTap={{ scale: 0.90 }}
               onClick={() => setActiveTab('kayit')}
               className={`flex-1 py-1 flex flex-col items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'kayit'
@@ -421,10 +505,11 @@ export default function App() {
                 activeTab === 'kayit' ? 'bg-indigo-50 scale-110 border border-indigo-100/50' : ''
               }`}>🎯</span>
               <span className="text-[8.5px] font-bold font-sans mt-0.5 text-center">Hızlı Kayıt</span>
-            </button>
+            </motion.button>
 
             {/* Tab 3: Ödemeler (Tracking) */}
-            <button
+            <motion.button
+              whileTap={{ scale: 0.90 }}
               onClick={() => setActiveTab('takip')}
               className={`flex-1 py-1 flex flex-col items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'takip'
@@ -434,10 +519,11 @@ export default function App() {
             >
               <CalendarClock className={`w-4 h-4 ${activeTab === 'takip' ? 'text-indigo-600 scale-110' : ''}`} />
               <span className="text-[8.5px] font-bold font-sans mt-0.5">Ödemelerim</span>
-            </button>
+            </motion.button>
 
             {/* Tab 4: Rapor (Analytical Reports) */}
-            <button
+            <motion.button
+              whileTap={{ scale: 0.90 }}
               onClick={() => setActiveTab('grafikler')}
               className={`flex-1 py-1 flex flex-col items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'grafikler'
@@ -447,10 +533,11 @@ export default function App() {
             >
               <BarChart3 className={`w-4 h-4 ${activeTab === 'grafikler' ? 'text-indigo-600 scale-110' : ''}`} />
               <span className="text-[8.5px] font-bold font-sans mt-0.5">Raporlar</span>
-            </button>
+            </motion.button>
 
             {/* Tab 5: İşlemler (History List) */}
-            <button
+            <motion.button
+              whileTap={{ scale: 0.90 }}
               onClick={() => setActiveTab('islemler')}
               className={`flex-1 py-1 flex flex-col items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'islemler'
@@ -460,10 +547,11 @@ export default function App() {
             >
               <Receipt className={`w-4 h-4 ${activeTab === 'islemler' ? 'text-indigo-600 scale-110' : ''}`} />
               <span className="text-[8.5px] font-bold font-sans mt-0.5">İşlemler</span>
-            </button>
+            </motion.button>
 
             {/* Tab 6: Ayarlar & Kategori Yönetimi */}
-            <button
+            <motion.button
+              whileTap={{ scale: 0.90 }}
               onClick={() => setActiveTab('ayarlar')}
               className={`flex-1 py-1 flex flex-col items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'ayarlar'
@@ -473,7 +561,7 @@ export default function App() {
             >
               <SettingsIcon className={`w-4 h-4 ${activeTab === 'ayarlar' ? 'text-indigo-600 scale-110' : ''}`} />
               <span className="text-[8.5px] font-bold font-sans mt-0.5">Ayarlar</span>
-            </button>
+            </motion.button>
 
           </div>
         </div>

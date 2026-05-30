@@ -5,17 +5,20 @@ import { loadCustomCategories } from '../db';
 import { ArrowLeft, Search, Trash2, ArrowDownLeft, ArrowUpRight, Calendar } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { getCategoryEmoji } from '../utils/emoji';
+import { getCategoryPalette } from '../utils/categoryColors';
 
 interface TransactionsProps {
   transactions: Transaction[];
   onDeleteTransaction: (id: string) => void;
   onNavigateHome: () => void;
+  hideSensitiveData?: boolean;
 }
 
 export default function Transactions({
   transactions,
   onDeleteTransaction,
   onNavigateHome,
+  hideSensitiveData = false,
 }: TransactionsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'Tümü' | 'Gelir' | 'Gider'>('Tümü');
@@ -41,6 +44,7 @@ export default function Transactions({
   }, []);
 
   const formatCurrency = (val: number) => {
+    if (hideSensitiveData) return '•••• ₺';
     if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
     return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,
@@ -250,6 +254,8 @@ export default function Transactions({
               const isGelir = t.tur === 'Gelir';
               const trDateFormatted = t.tarih.split('-').reverse().join('.');
 
+              const palette = getCategoryPalette(t.kategori);
+
               return (
                 <motion.div
                   layout
@@ -257,11 +263,11 @@ export default function Transactions({
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
                   key={t.id}
-                  className="flex items-center justify-between p-3 bg-white rounded-2xl hover:border-indigo-400 hover:shadow-xxs border border-slate-300 transition-all duration-200 group"
+                  className={`flex items-center justify-between p-3 rounded-2xl hover:border-indigo-400 hover:shadow-xxs border transition-all duration-200 group ${palette.bg} ${palette.border}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Rounded Image Frame container */}
-                    <div className="relative w-11 h-11 bg-slate-50 border border-slate-200 rounded-2xl shadow-2xs flex items-center justify-center shrink-0">
+                    <div className="relative w-11 h-11 bg-white border border-slate-200 rounded-2xl shadow-3xs flex items-center justify-center shrink-0">
                       <span className="text-xl select-none font-mono">{emoji}</span>
                       
                       {/* Corner signal type indicator */}
@@ -281,7 +287,7 @@ export default function Transactions({
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5 leading-none">
                         <span className="text-[9.5px] text-slate-500 font-mono">{trDateFormatted}</span>
                         <span className="w-1 h-1 bg-slate-200 rounded-full" />
-                        <span className="text-[9.5px] text-indigo-650 bg-indigo-50 border border-indigo-100/50 font-black px-1.5 py-0.5 rounded-md font-sans leading-none block">
+                        <span className={`text-[9.5px] font-black px-1.5 py-0.5 border rounded-md font-sans leading-none block ${palette.badge}`}>
                           {t.kategori}{t.altKategori ? ` › ${t.altKategori}` : ''}
                         </span>
                         {t.faturaFile && (
@@ -299,23 +305,24 @@ export default function Transactions({
                   {/* Right Price block & Action button */}
                   <div className="flex items-center gap-2.5 shrink-0">
                     <div className="text-right flex flex-col items-end leading-tight">
-                      <span className={`text-[12.5px] font-mono font-black ${isGelir ? 'text-emerald-600' : 'text-slate-900'}`}>
+                      <span className={`text-[12.5px] font-mono font-black ${isGelir ? 'text-emerald-700' : 'text-slate-900'}`}>
                         {isGelir ? '+' : '-'} {formatCurrency(t.tutar)}
                       </span>
                       {t.usdRate && (
-                        <span className="text-[9.5px] text-slate-400 font-mono tracking-tight leading-none mt-0.5" title={`Kur: ${t.usdRate} TL`}>
-                          {isGelir ? '+' : '-'}${parseFloat((t.tutar / t.usdRate).toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                        <span className="text-[9.5px] text-slate-400 font-mono tracking-tight leading-none mt-0.5" title={hideSensitiveData ? undefined : `Kur: ${t.usdRate} TL`}>
+                          {isGelir ? '+' : '-'} {hideSensitiveData ? '••••' : `$${parseFloat((t.tutar / t.usdRate).toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} USD
                         </span>
                       )}
                     </div>
                     
-                    <button
+                    <motion.button
+                      whileTap={{ scale: 0.88 }}
                       onClick={() => promptDeleteTransaction(t.id, t.aciklama)}
-                      className="p-2 text-rose-500 bg-rose-50/70 hover:bg-rose-500 hover:text-white border border-rose-100 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
+                      className="p-2 text-rose-500 bg-white hover:bg-rose-500 hover:text-white border border-rose-150 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
                       title="İşlemi Sil"
                     >
                       <Trash2 className="w-4 h-4" />
-                    </button>
+                    </motion.button>
                   </div>
                 </motion.div>
               );

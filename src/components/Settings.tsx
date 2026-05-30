@@ -32,6 +32,8 @@ interface SettingsProps {
   payments: RecurringPayment[];
   setPayments: (p: RecurringPayment[]) => void;
   onNavigateHome: () => void;
+  autoLockDelay?: string;
+  onChangeAutoLockDelay?: (val: string) => void;
 }
 
 export default function Settings({ 
@@ -39,7 +41,9 @@ export default function Settings({
   setTransactions, 
   payments,
   setPayments,
-  onNavigateHome 
+  onNavigateHome,
+  autoLockDelay = 'Kapalı',
+  onChangeAutoLockDelay
 }: SettingsProps) {
   
   // Reusable custom ConfirmModal states
@@ -2747,6 +2751,28 @@ function handleRequest(e) {
           {passSuccess && (
             <div className="p-2.5 bg-emerald-50 border border-emerald-100 text-emerald-800 font-bold text-[10px] rounded-xl text-center">
               ✓ {passSuccess}
+            </div>
+          )}
+
+          {appPassword && (
+            <div className="space-y-1.5 pt-3 border-t border-slate-100 font-sans">
+              <label className="text-[10px] font-semibold text-slate-500 block">⚡ Otomatik Kilitleme (Süre Aşımı)</label>
+              <select
+                value={autoLockDelay}
+                onChange={(e) => {
+                  if (onChangeAutoLockDelay) {
+                    onChangeAutoLockDelay(e.target.value);
+                  }
+                }}
+                className="w-full p-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none text-slate-800 font-bold cursor-pointer"
+              >
+                <option value="Kapalı">Devre Dışı (Masaüstünde kilitleme)</option>
+                <option value="30sn">30 Saniye Hareketsizlik</option>
+                <option value="1dk">1 Dakika Hareketsizlik</option>
+                <option value="2dk">2 Dakika Hareketsizlik</option>
+                <option value="5dk">5 Dakika Hareketsizlik</option>
+              </select>
+              <span className="text-[9px] text-slate-400 block italic leading-tight">Sekme gizlendiğinde veya belirtilen süre boyunca işlem yapılmadığında PIN ekranı kilitlenir.</span>
             </div>
           )}
         </div>

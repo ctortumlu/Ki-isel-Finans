@@ -12,6 +12,7 @@ interface DashboardProps {
   userName?: string;
   onSync?: () => Promise<void>;
   isSyncing?: boolean;
+  hideSensitiveData?: boolean;
 }
 
 export default function Dashboard({ 
@@ -20,7 +21,8 @@ export default function Dashboard({
   onNavigate, 
   userName = "Cavit",
   onSync,
-  isSyncing = false
+  isSyncing = false,
+  hideSensitiveData = false
 }: DashboardProps) {
   const [timeframe, setTimeframe] = useState<'Aylık' | 'Yıllık' | 'Tümü'>('Aylık');
 
@@ -73,6 +75,7 @@ export default function Dashboard({
   }).length;
 
   const formatCurrency = (val: number) => {
+    if (hideSensitiveData) return '•••• ₺';
     if (val === undefined || val === null || isNaN(val)) return '0,00 ₺';
     return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,

@@ -15,6 +15,7 @@ interface PaymentTrackerProps {
   onNavigateHome: () => void;
   onAddTransaction: (txn: Omit<Transaction, 'id'>) => void;
   onPayPayment: (txn: Omit<Transaction, 'id'>, payment: RecurringPayment) => void;
+  hideSensitiveData?: boolean;
 }
 
 export default function PaymentTracker({
@@ -25,6 +26,7 @@ export default function PaymentTracker({
   onNavigateHome,
   onAddTransaction,
   onPayPayment,
+  hideSensitiveData = false,
 }: PaymentTrackerProps) {
   const [editingPayment, setEditingPayment] = useState<RecurringPayment | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -228,6 +230,7 @@ export default function PaymentTracker({
   };
 
   const formatCurrency = (val: number) => {
+    if (hideSensitiveData) return '••••\u00a0₺';
     if (val === undefined || val === null || isNaN(val)) return '0,00\u00a0₺';
     return val.toLocaleString('tr-TR', {
       minimumFractionDigits: 2,
