@@ -24,11 +24,13 @@ import PaymentTracker from './components/PaymentTracker';
 import Transactions from './components/Transactions';
 import Charts from './components/Charts';
 import Settings from './components/Settings';
+import LockScreen from './components/LockScreen';
 
 // Icons for Tab Bar
 import { Home, CalendarClock, Receipt, Percent, FileCode2, Wifi, BatteryMedium, Signal, Settings as SettingsIcon, BarChart3 } from 'lucide-react';
 
 export default function App() {
+  const [isLocked, setIsLocked] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('pano');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [payments, setPayments] = useState<RecurringPayment[]>([]);
@@ -310,7 +312,14 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen h-[100dvh] max-h-screen max-h-[100dvh] overflow-hidden md:h-auto md:min-h-screen md:max-h-none md:overflow-visible bg-slate-100 flex items-center justify-center p-0 md:p-6 select-none select-text">
+    <>
+      <AnimatePresence>
+        {isLocked && (
+          <LockScreen onUnlock={() => setIsLocked(false)} />
+        )}
+      </AnimatePresence>
+
+      <div className="h-screen h-[100dvh] max-h-screen max-h-[100dvh] overflow-hidden md:h-auto md:min-h-screen md:max-h-none md:overflow-visible bg-slate-100 flex items-center justify-center p-0 md:p-6 select-none select-text">
       
       {/* Outer framing for gorgeous Presentation */}
       <div className="w-full max-w-md bg-white md:rounded-[45px] md:shadow-2xl overflow-hidden h-full max-h-full md:min-h-[820px] md:h-[820px] md:border-8 md:border-slate-800 flex flex-col justify-between relative">
@@ -471,5 +480,6 @@ export default function App() {
 
       </div>
     </div>
+    </>
   );
 }

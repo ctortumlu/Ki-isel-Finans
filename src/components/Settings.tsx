@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, Check, Copy, FileSpreadsheet, Settings as SettingsIcon, Link, CheckCircle, 
   AlertTriangle, Plus, Trash2, Database, Sparkles, Layers, FileDown, 
-  Trash, Import, Eye, CheckSquare, FileText, ChevronRight, RefreshCw
+  Trash, Import, Eye, CheckSquare, FileText, ChevronRight, RefreshCw,
+  Lock, ShieldCheck
 } from 'lucide-react';
 import { loadCustomCategories, saveCustomCategories, savePayments } from '../db';
 import { getCategoryEmoji, stripEmoji } from '../utils/emoji';
@@ -55,6 +56,15 @@ export default function Settings({
     setConfirmModalIsDangerous(isDangerous);
     setConfirmModalOpen(true);
   };
+
+  // Master Passcode Security state
+  const [appPassword, setAppPassword] = useState<string | null>(() => localStorage.getItem('finance_app_password'));
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  const [oldPasswordInput, setOldPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [passError, setPassError] = useState<string | null>(null);
+  const [passSuccess, setPassSuccess] = useState<string | null>(null);
 
   // Category management state
   const [customCategories, setCustomCategories] = useState<SheetCategory[]>([]);
@@ -1203,6 +1213,69 @@ function handleRequest(e) {
   return ContentService.createTextOutput(JSON.stringify(responseData))
     .setMimeType(ContentService.MimeType.JSON);
 }`;
+
+  const handleSavePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError(null);
+    setPassSuccess(null);
+
+    // If changing/removing, first check old password if defined
+    if (appPassword) {
+      if (oldPasswordInput !== appPassword) {
+        setPassError('Mevcut şifreniz hatalı. Lütfen kontrol edin.');
+        return;
+      }
+    }
+
+    // If new password is empty, they are disabling it!
+    if (!newPasswordInput) {
+      setPassError('Lütfen yeni bir şifre girin.');
+      return;
+    }
+
+    if (newPasswordInput.length !== 4 || isNaN(Number(newPasswordInput))) {
+      setPassError('Şifre tam olarak 4 haneli bir sayı olmalıdır.');
+      return;
+    }
+
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPassError('Yeni şifreler eşleşmedi! Lütfen doğruluğundan emin olun.');
+      return;
+    }
+
+    // Save
+    localStorage.setItem('finance_app_password', newPasswordInput);
+    setAppPassword(newPasswordInput);
+    setPassSuccess('Giriş şifreniz başarıyla kaydedilmiştir!');
+    
+    // Reset forms
+    setIsChangingPass(false);
+    setOldPasswordInput('');
+    setNewPasswordInput('');
+    setConfirmPasswordInput('');
+    
+    setTimeout(() => setPassSuccess(null), 3500);
+  };
+
+  const handleRemovePassword = () => {
+    setPassError(null);
+    setPassSuccess(null);
+    
+    if (appPassword) {
+      const currentInput = prompt("Şifre korumasını kaldırmak için lütfen mevcut 4 haneli şifrenizi girin:");
+      if (currentInput === null) return; // user cancelled
+      if (currentInput !== appPassword) {
+        alert("Hatalı mevcut şifre! Şifre koruması kaldırılamadı.");
+        return;
+      }
+    }
+
+    localStorage.removeItem('finance_app_password');
+    setAppPassword(null);
+    setPassSuccess('Güvenlik şifresi başarıyla devre dışı bırakılmıştır!');
+    setIsChangingPass(false);
+    setTimeout(() => setPassSuccess(null), 3500);
+  };
 
   const handleSaveSyncConfig = (url: string, enabled: boolean, autoSync: boolean) => {
     setAppsScriptUrl(url);
@@ -2540,6 +2613,141 @@ function handleRequest(e) {
                 </div>
               );
             })
+          )}
+        </div>
+      </div>
+
+      {/* 3.4. UYGULAMA GİRİŞ GÜVENLİĞİ (PIN) */}
+      <div className="p-5 bg-white border border-slate-150 shadow-3xs rounded-[25px] space-y-4" id="app-security-pin-card">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+          <Lock className="w-5 h-5 text-indigo-600" /> Uygulama Giriş Şifresi (PIN)
+        </h3>
+
+        <p className="text-[10px] text-slate-500 font-sans leading-relaxed">
+          Finansal verilerinizi güvende tutmak için uygulamaya girişte 4 haneli bir güvenlik PIN kodu belirleyebilirsiniz. Şifre aktifken şifre girilmeden uygulamaya erişilemez.
+        </p>
+
+        {/* Protection Banner Status */}
+        {appPassword ? (
+          <div className="p-3 bg-emerald-50 rounded-2xl flex items-center justify-between border border-emerald-100 font-sans">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10.5px] font-bold text-emerald-800 flex items-center gap-1">
+                <ShieldCheck className="w-4 h-4 text-emerald-650" /> Şifre Koruması Aktif (Sayısal PIN)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRemovePassword}
+              className="text-[9.5px] font-bold text-rose-650 hover:underline cursor-pointer"
+            >
+              Korumayı Kaldır
+            </button>
+          </div>
+        ) : (
+          <div className="p-3 bg-amber-50 rounded-2xl flex items-center gap-2 border border-amber-100 text-[10.5px] text-amber-850 font-sans leading-relaxed font-bold">
+            <span>⚠️</span>
+            <span>Uygulama Şifreniz Yok! Giriş Koruması devredışı.</span>
+          </div>
+        )}
+
+        {/* Action Controls */}
+        <div className="pt-1.5 space-y-3">
+          {!isChangingPass ? (
+            <button
+              type="button"
+              onClick={() => setIsChangingPass(true)}
+              className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10.5px] rounded-xl transition-all border border-indigo-150 cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
+            >
+              🔐 {appPassword ? 'Giriş Şifresini Değiştir' : 'Yeni Giriş Şifresi Tanımla'}
+            </button>
+          ) : (
+            <form onSubmit={handleSavePassword} className="space-y-3 p-3 bg-slate-50 border border-slate-150 rounded-2xl font-sans text-sans">
+              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider block border-b border-slate-200 pb-1">
+                {appPassword ? 'Şifreyi Değiştir' : 'Giriş Şifresi Belirle'}
+              </span>
+
+              {appPassword && (
+                <div>
+                  <label className="text-[9.5px] font-bold text-slate-500 block mb-1">Mevcut Şifre (4 Hane)</label>
+                  <input
+                    type="password"
+                    pattern="[0-9]*"
+                    inputMode="numeric"
+                    maxLength={4}
+                    required
+                    placeholder="••••"
+                    value={oldPasswordInput}
+                    onChange={(e) => setOldPasswordInput(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-3 py-1.5 bg-white border border-slate-250 rounded-lg text-xs font-mono tracking-widest text-center"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-[9.5px] font-bold text-slate-500 block mb-1">Yeni Giriş Şifresi (4 Hane)</label>
+                <input
+                  type="password"
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  maxLength={4}
+                  required
+                  placeholder="••••"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-250 rounded-lg text-xs font-mono tracking-widest text-center"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9.5px] font-bold text-slate-500 block mb-1">Şifreyi Doğrulayın (Tekrar Tuşlayın)</label>
+                <input
+                  type="password"
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  maxLength={4}
+                  required
+                  placeholder="••••"
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-250 rounded-lg text-xs font-mono tracking-widest text-center"
+                />
+              </div>
+
+              {passError && (
+                <div className="text-[9.5px] font-bold text-rose-650 bg-rose-50 border border-rose-100 p-2 rounded-lg text-center">
+                  ⚠️ {passError}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChangingPass(false);
+                    setOldPasswordInput('');
+                    setNewPasswordInput('');
+                    setConfirmPasswordInput('');
+                    setPassError(null);
+                  }}
+                  className="flex-1 py-1.5 text-slate-600 hover:bg-slate-200 text-[10px] font-bold rounded-lg cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg cursor-pointer active:scale-97"
+                >
+                  Onayla & Kaydet
+                </button>
+              </div>
+            </form>
+          )}
+
+          {passSuccess && (
+            <div className="p-2.5 bg-emerald-50 border border-emerald-100 text-emerald-800 font-bold text-[10px] rounded-xl text-center">
+              ✓ {passSuccess}
+            </div>
           )}
         </div>
       </div>

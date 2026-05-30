@@ -59,9 +59,17 @@ export default function Dashboard({
   const pendingPayments = payments.filter((p) => p.durum === 'Bekliyor');
   const overdueCount = pendingPayments.filter((p) => getDaysRemaining(p.sonOdemeTarihi) < 0).length;
   const dueTodayCount = pendingPayments.filter((p) => getDaysRemaining(p.sonOdemeTarihi) === 0).length;
-  const criticalCount = pendingPayments.filter((p) => {
+  const d1to5Count = pendingPayments.filter((p) => {
     const days = getDaysRemaining(p.sonOdemeTarihi);
-    return days > 0 && days <= 3;
+    return days >= 1 && days <= 5;
+  }).length;
+  const d6to10Count = pendingPayments.filter((p) => {
+    const days = getDaysRemaining(p.sonOdemeTarihi);
+    return days >= 6 && days <= 10;
+  }).length;
+  const d11PlusCount = pendingPayments.filter((p) => {
+    const days = getDaysRemaining(p.sonOdemeTarihi);
+    return days >= 11;
   }).length;
 
   const formatCurrency = (val: number) => {
@@ -105,9 +113,9 @@ export default function Dashboard({
             className="relative p-2.5 bg-white rounded-full text-slate-600 shadow-xs hover:bg-slate-50 transition-colors border border-slate-100/50 active:scale-95"
           >
             <Bell className="w-5 h-5" />
-            {(overdueCount + dueTodayCount + criticalCount) > 0 && (
+            {pendingPayments.length > 0 && (
               <span className="absolute top-0 right-0 w-4 h-4 bg-rose-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center animate-pulse">
-                {overdueCount + dueTodayCount + criticalCount}
+                {pendingPayments.length}
               </span>
             )}
           </button>
@@ -168,7 +176,7 @@ export default function Dashboard({
 
           {/* Bottom Section: Centered Net Bakiye */}
           <div className="pt-4 flex flex-col items-center justify-center w-full text-center">
-            <span className="text-[9.5px] font-extrabold text-indigo-200/60 uppercase tracking-widest block">NET BAKİYE</span>
+            <span className="text-[9.5px] font-extrabold text-indigo-200/60 uppercase tracking-widest block font-sans">NET BAKİYE</span>
             <h1 className={`font-display font-black tracking-tight mt-1 font-mono ${
               netBalance >= 0 
                 ? 'text-white' 
@@ -187,12 +195,12 @@ export default function Dashboard({
         </div>
       </motion.div>
 
-      {/* Quick Alerts Section for overdue or due today items */}
-      {(overdueCount > 0 || dueTodayCount > 0) && (
+      {/* Quick Alerts Section for categorized pending items */}
+      {pendingPayments.length > 0 && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="p-4 bg-amber-50/80 border border-amber-200 rounded-[20px] text-xs shadow-xs space-y-2.5 text-sans"
+          className="p-4 bg-amber-50/80 border border-amber-200 rounded-[20.5px] text-xs shadow-xs space-y-2.5 text-sans"
         >
           <div className="flex items-center justify-between border-b border-amber-200/55 pb-2">
             <span className="text-[10px] font-extrabold text-amber-850 uppercase tracking-widest flex items-center gap-1.5">
@@ -207,6 +215,7 @@ export default function Dashboard({
           </div>
 
           <div className="space-y-2">
+            {/* Günü Geçmiş */}
             {overdueCount > 0 && (
               <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-100 p-2.5 rounded-xl text-rose-950">
                 <span className="text-sm">⚠️</span>
@@ -219,14 +228,54 @@ export default function Dashboard({
               </div>
             )}
 
+            {/* Son Ödeme Günü Bugün */}
             {dueTodayCount > 0 && (
-              <div className="flex items-start gap-2.5 bg-indigo-50 border border-indigo-100 p-2.5 rounded-xl text-indigo-950">
+              <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 p-2.5 rounded-xl text-amber-950">
                 <span className="text-sm">⚡</span>
                 <div>
                   <p className="font-bold text-[11px] leading-tight">
-                    Son ödeme günü <span className="underline font-black text-indigo-900">bugün</span> olan <span className="font-black text-indigo-900">{dueTodayCount} ödemeniz</span> var!
+                    Son ödeme günü <span className="underline font-black text-amber-900">bugün</span> olan <span className="font-black text-amber-900">{dueTodayCount} ödemeniz</span> var!
                   </p>
-                  <span className="text-[9.5px] text-indigo-700/80 font-semibold block mt-0.5">Tarihi gecikmeden bugün ödeme kaydı ekleyin.</span>
+                  <span className="text-[9.5px] text-amber-700/80 font-semibold block mt-0.5">Tarihi gecikmeden bugün ödeme kaydı ekleyin.</span>
+                </div>
+              </div>
+            )}
+
+            {/* 1-5 Gün Kalanlar */}
+            {d1to5Count > 0 && (
+              <div className="flex items-start gap-2.5 bg-orange-50 border border-orange-100 p-2.5 rounded-xl text-orange-950">
+                <span className="text-sm">⌛</span>
+                <div>
+                  <p className="font-bold text-[11px] leading-tight">
+                    Son ödeme günü <span className="underline font-black text-orange-900">1-5 gün kalan {d1to5Count} faturanız/ödemeniz</span> bulunuyor!
+                  </p>
+                  <span className="text-[9.5px] text-orange-700/80 font-semibold block mt-0.5">Ödemelerinizi planlayarak gecikmelerin önüne geçin.</span>
+                </div>
+              </div>
+            )}
+
+            {/* 6-10 Gün Kalanlar */}
+            {d6to10Count > 0 && (
+              <div className="flex items-start gap-2.5 bg-indigo-50 border border-indigo-100 p-2.5 rounded-xl text-indigo-950">
+                <span className="text-sm">🗓️</span>
+                <div>
+                  <p className="font-bold text-[11px] leading-tight">
+                    Son ödeme günü <span className="underline font-black text-indigo-900">6-10 gün kalan {d6to10Count} faturanız/ödemeniz</span> bulunuyor!
+                  </p>
+                  <span className="text-[9.5px] text-indigo-700/80 font-semibold block mt-0.5">Önümüzdeki hafta yapılması gereken ödemelerinizi takip edin.</span>
+                </div>
+              </div>
+            )}
+
+            {/* 11+ Gün Kalanlar */}
+            {d11PlusCount > 0 && (
+              <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl text-emerald-950">
+                <span className="text-sm">🌱</span>
+                <div>
+                  <p className="font-bold text-[11px] leading-tight">
+                    Son ödeme günü <span className="underline font-black text-emerald-900">11 gün veya daha fazla kalan {d11PlusCount} ödemeniz</span> var.
+                  </p>
+                  <span className="text-[9.5px] text-emerald-700/80 font-semibold block mt-0.5">Daha uzun vadeli ödemeleriniz, her şey kontrol altında.</span>
                 </div>
               </div>
             )}
