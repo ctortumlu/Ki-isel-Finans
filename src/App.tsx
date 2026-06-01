@@ -29,6 +29,61 @@ import LockScreen from './components/LockScreen';
 // Icons for Tab Bar
 import { Home, CalendarClock, Receipt, Percent, FileCode2, Wifi, BatteryMedium, Signal, Settings as SettingsIcon, BarChart3, Eye, EyeOff } from 'lucide-react';
 
+// ===================== OFFLINE-FIRST SMART CLOUD MERGE HELPERS =====================
+function mergeTransactions(localTxns: Transaction[], cloudTxns: Transaction[]): Transaction[] {
+  const map = new Map<string, Transaction>();
+  
+  // 1. Load cloud transactions as the primary base (the master registry)
+  cloudTxns.forEach(t => {
+    map.set(t.id, t);
+  });
+  
+  // 2. Overlay local transactions to preserve modified, soft-deleted ('Pasif'), or newly created unsynced items
+  localTxns.forEach(t => {
+    const existing = map.get(t.id);
+    if (!existing) {
+      // Unsynced addition made locally while mobile was offline or saving was in progress
+      map.set(t.id, t);
+    } else {
+      // Exists in both. If the local one contains a newer update, like being soft-deleted ('Pasif'), prefer it.
+      if (t.aktifPasif === 'Pasif' && existing.aktifPasif === 'Aktif') {
+        map.set(t.id, t);
+      }
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.tarih.localeCompare(a.tarih));
+}
+
+function mergePayments(localPmts: RecurringPayment[], cloudPmts: RecurringPayment[]): RecurringPayment[] {
+  const map = new Map<string, RecurringPayment>();
+  
+  // 1. Load cloud payments as base registry
+  cloudPmts.forEach(p => {
+    map.set(p.id, p);
+  });
+  
+  // 2. Overlay local payments. Local wins if the status is altered (such as marked Paid or soft-deleted/Passive)
+  localPmts.forEach(p => {
+    const existing = map.get(p.id);
+    if (!existing) {
+      map.set(p.id, p);
+    } else {
+      const isLocalModified = 
+        (p.durum === 'Odendi' && existing.durum === 'Bekliyor') ||
+        (p.aktifPasif === 'Pasif' && existing.aktifPasif === 'Aktif') ||
+        (p.sonOdemeTarihi > existing.sonOdemeTarihi) ||
+        (p.sonOdemeTarihi !== existing.sonOdemeTarihi && p.aktifPasif === 'Pasif');
+      
+      if (isLocalModified) {
+        map.set(p.id, p);
+      }
+    }
+  });
+  
+  return Array.from(map.values());
+}
+
 export default function App() {
   const [isLocked, setIsLocked] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('pano');
@@ -61,7 +116,7 @@ export default function App() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  // Load state on mount
+  // Load state on mount with smart merging
   useEffect(() => {
     const localTxns = loadTransactions();
     const localPmts = loadPayments();
@@ -72,12 +127,25 @@ export default function App() {
       setIsSyncing(true);
       syncGetAllData().then((res) => {
         if (res.success && res.transactions && res.payments) {
-          setTransactions(res.transactions);
-          setPayments(res.payments);
-          saveTransactions(res.transactions);
-          savePayments(res.payments);
+          const mergedTxns = mergeTransactions(localTxns, res.transactions);
+          const mergedPmts = mergePayments(localPmts, res.payments);
+
+          setTransactions(mergedTxns);
+          setPayments(mergedPmts);
+          saveTransactions(mergedTxns);
+          savePayments(mergedPmts);
           setLastSyncTime(new Date().toLocaleString('tr-TR'));
           console.log("Bulut eşitleme başlangıçta başarıyla tamamlandı.");
+
+          // If there is any unsynced local modification/deletion/payment, automatically push to cloud
+          const hasTxDiff = mergedTxns.length !== res.transactions.length || 
+                            mergedTxns.some(t => !res.transactions.some(ct => ct.id === t.id && ct.aktifPasif === t.aktifPasif));
+          const hasPmtDiff = mergedPmts.length !== res.payments.length ||
+                             mergedPmts.some(p => !res.payments.some(cp => cp.id === p.id && cp.durum === p.durum && cp.aktifPasif === p.aktifPasif));
+
+          if (hasTxDiff || hasPmtDiff) {
+            triggerBackgroundSync(mergedTxns, mergedPmts, 'all');
+          }
         }
       }).catch(err => {
         console.warn('Otomatik başlangıç senkronizasyonu hatası:', err);
@@ -142,12 +210,29 @@ export default function App() {
     try {
       const res = await syncGetAllData();
       if (res.success && res.transactions && res.payments) {
-        setTransactions(res.transactions);
-        setPayments(res.payments);
-        saveTransactions(res.transactions);
-        savePayments(res.payments);
+        const localTxns = loadTransactions();
+        const localPmts = loadPayments();
+
+        const mergedTxns = mergeTransactions(localTxns, res.transactions);
+        const mergedPmts = mergePayments(localPmts, res.payments);
+
+        setTransactions(mergedTxns);
+        setPayments(mergedPmts);
+        saveTransactions(mergedTxns);
+        savePayments(mergedPmts);
         setLastSyncTime(new Date().toLocaleString('tr-TR'));
-        alert("Eşitleme başarıyla tamamlandı! Buluttaki güncel verileriniz yüklendi.");
+
+        // Check if there are local additions/changes merged that need to be synced up
+        const hasTxDiff = mergedTxns.length !== res.transactions.length || 
+                          mergedTxns.some(t => !res.transactions.some(ct => ct.id === t.id && ct.aktifPasif === t.aktifPasif));
+        const hasPmtDiff = mergedPmts.length !== res.payments.length ||
+                           mergedPmts.some(p => !res.payments.some(cp => cp.id === p.id && cp.durum === p.durum && cp.aktifPasif === p.aktifPasif));
+
+        if (hasTxDiff || hasPmtDiff) {
+          triggerBackgroundSync(mergedTxns, mergedPmts, 'all');
+        }
+
+        alert("Eşitleme başarıyla tamamlandı! Buluttaki güncel verileriniz yüklendi ve yerel verilerinizle birleştirildi.");
       } else {
         alert("Eşitleme başarısız: " + (res.error || "Bilinmeyen hata"));
       }
