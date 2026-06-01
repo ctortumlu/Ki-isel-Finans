@@ -1026,13 +1026,26 @@ function handleRequest(e) {
           var altKatCol = findColumnIndex(txHeaders, ["altkategori", "altkatagori", "subcategory"]);
           var tutarCol = findColumnIndex(txHeaders, ["tutar", "amount", "fiyat"]);
           var aciklamaCol = findColumnIndex(txHeaders, ["aciklama", "açıklama", "acıklama", "description", "not"]);
-          var activePassiveCol = findColumnIndex(txHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
+          var activePassiveCol = findColumnIndex(txHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif", "aktifpasi", "aktif-pasi"]);
           var usdRateCol = findColumnIndex(txHeaders, ["usdrate", "usd/tl", "usd / tl", "dolar", "dolar_kuru", "kur", "usd_try", "usdtry"]);
+
+          var hasHeaderChanges = false;
+
+          // Dynamically append the id column if it does not exist (Self-healing!)
+          if (idCol === -1) {
+            txHeaders.push("id");
+            idCol = txHeaders.length - 1;
+            hasHeaderChanges = true;
+          }
 
           // Dynamically append the USD / TL column if it does not exist (Self-healing!)
           if (usdRateCol === -1) {
             txHeaders.push("USD / TL");
             usdRateCol = txHeaders.length - 1;
+            hasHeaderChanges = true;
+          }
+
+          if (hasHeaderChanges) {
             // Write updated headers row back to the sheet!
             txSheet.getRange(txHeaderRowIdx + 1, 1, 1, txHeaders.length).setValues([txHeaders]);
           }
@@ -1139,7 +1152,27 @@ function handleRequest(e) {
           var pTarihCol = findColumnIndex(payHeaders, ["sonodemetarihi", "tarih", "date"]);
           var pKateCol = findColumnIndex(payHeaders, ["kategori", "category", "katagori", "katagor"]);
           var pDurumCol = findColumnIndex(payHeaders, ["durum", "status"]);
-          var pActivePassiveCol = findColumnIndex(payHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif"]);
+          var pActivePassiveCol = findColumnIndex(payHeaders, ["aktifpasif", "aktif-pasif", "durumaktifpasif", "aktifpasi", "aktif-pasi"]);
+
+          var hasPayHeaderChanges = false;
+
+          // Dynamically append the id column if it does not exist (Self-healing!)
+          if (pIdCol === -1) {
+            payHeaders.push("id");
+            pIdCol = payHeaders.length - 1;
+            hasPayHeaderChanges = true;
+          }
+
+          // Dynamically append the Aktif-Pasif column if it does not exist (Self-healing!)
+          if (pActivePassiveCol === -1) {
+            payHeaders.push("Aktif-Pasif");
+            pActivePassiveCol = payHeaders.length - 1;
+            hasPayHeaderChanges = true;
+          }
+
+          if (hasPayHeaderChanges) {
+            paySheet.getRange(payHeaderRowIdx + 1, 1, 1, payHeaders.length).setValues([payHeaders]);
+          }
 
           payments.forEach(function(p) {
             var newRow = new Array(payHeaders.length);

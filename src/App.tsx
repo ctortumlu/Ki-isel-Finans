@@ -31,57 +31,91 @@ import { Home, CalendarClock, Receipt, Percent, FileCode2, Wifi, BatteryMedium, 
 
 // ===================== OFFLINE-FIRST SMART CLOUD MERGE HELPERS =====================
 function mergeTransactions(localTxns: Transaction[], cloudTxns: Transaction[]): Transaction[] {
-  const map = new Map<string, Transaction>();
+  const merged: Transaction[] = [];
   
-  // 1. Load cloud transactions as the primary base (the master registry)
-  cloudTxns.forEach(t => {
-    map.set(t.id, t);
-  });
-  
-  // 2. Overlay local transactions to preserve modified, soft-deleted ('Pasif'), or newly created unsynced items
-  localTxns.forEach(t => {
-    const existing = map.get(t.id);
-    if (!existing) {
-      // Unsynced addition made locally while mobile was offline or saving was in progress
-      map.set(t.id, t);
-    } else {
-      // Exists in both. If the local one contains a newer update, like being soft-deleted ('Pasif'), prefer it.
-      if (t.aktifPasif === 'Pasif' && existing.aktifPasif === 'Aktif') {
-        map.set(t.id, t);
-      }
+  // Helper to determine if two transactions represent the same physical action (deduplication)
+  const isDuplicate = (t1: Transaction, t2: Transaction) => {
+    if (t1.id === t2.id) return true;
+    
+    const sameDate = t1.tarih === t2.tarih;
+    const sameType = t1.tur === t2.tur;
+    const sameCat = t1.kategori === t2.kategori;
+    const sameSubCat = (t1.altKategori || '') === (t2.altKategori || '');
+    const sameAmount = Math.abs(t1.tutar - t2.tutar) < 0.01;
+    
+    const desc1 = (t1.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
+    const desc2 = (t2.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
+    const sameDesc = desc1 === desc2 || desc1.includes(desc2) || desc2.includes(desc1);
+    
+    return sameDate && sameType && sameCat && sameSubCat && sameAmount && sameDesc;
+  };
+
+  // 1. Seed with cloud transactions
+  cloudTxns.forEach(ct => {
+    const exists = merged.some(mt => isDuplicate(mt, ct));
+    if (!exists) {
+      merged.push(ct);
     }
   });
 
-  return Array.from(map.values()).sort((a, b) => b.tarih.localeCompare(a.tarih));
+  // 2. Overlay local transactions to preserve modified, soft-deleted ('Pasif'), or newly created unsynced items
+  localTxns.forEach(lt => {
+    const matchingIdx = merged.findIndex(mt => isDuplicate(mt, lt));
+    if (matchingIdx !== -1) {
+      const existing = merged[matchingIdx];
+      // Local changes (such as marked Passive or containing receipt documents) take precedence
+      if (lt.aktifPasif === 'Pasif' || existing.aktifPasif === 'Pasif') {
+        merged[matchingIdx] = { ...existing, ...lt, aktifPasif: 'Pasif' };
+      } else {
+        merged[matchingIdx] = { ...existing, ...lt };
+      }
+    } else {
+      // Unsynced addition made locally while mobile was offline or saving was in progress
+      merged.push(lt);
+    }
+  });
+
+  return merged.sort((a, b) => b.tarih.localeCompare(a.tarih));
 }
 
 function mergePayments(localPmts: RecurringPayment[], cloudPmts: RecurringPayment[]): RecurringPayment[] {
-  const map = new Map<string, RecurringPayment>();
-  
-  // 1. Load cloud payments as base registry
-  cloudPmts.forEach(p => {
-    map.set(p.id, p);
+  const merged: RecurringPayment[] = [];
+
+  const isDuplicate = (p1: RecurringPayment, p2: RecurringPayment) => {
+    if (p1.id === p2.id) return true;
+    return p1.baslik.trim().toLowerCase() === p2.baslik.trim().toLowerCase() &&
+           p1.kategori === p2.kategori &&
+           Math.abs(p1.tutar - p2.tutar) < 0.01;
+  };
+
+  // 1. Load cloud payments
+  cloudPmts.forEach(cp => {
+    const exists = merged.some(mp => isDuplicate(mp, cp));
+    if (!exists) {
+      merged.push(cp);
+    }
   });
-  
-  // 2. Overlay local payments. Local wins if the status is altered (such as marked Paid or soft-deleted/Passive)
-  localPmts.forEach(p => {
-    const existing = map.get(p.id);
-    if (!existing) {
-      map.set(p.id, p);
-    } else {
-      const isLocalModified = 
-        (p.durum === 'Odendi' && existing.durum === 'Bekliyor') ||
-        (p.aktifPasif === 'Pasif' && existing.aktifPasif === 'Aktif') ||
-        (p.sonOdemeTarihi > existing.sonOdemeTarihi) ||
-        (p.sonOdemeTarihi !== existing.sonOdemeTarihi && p.aktifPasif === 'Pasif');
+
+  // 2. Overlay local payments. Status is altered (such as marked Paid or soft-deleted/Passive)
+  localPmts.forEach(lp => {
+    const matchingIdx = merged.findIndex(mp => isDuplicate(mp, lp));
+    if (matchingIdx !== -1) {
+      const existing = merged[matchingIdx];
+      const isPaid = lp.durum === 'Odendi' || existing.durum === 'Odendi';
+      const isPassive = lp.aktifPasif === 'Pasif' || existing.aktifPasif === 'Pasif';
       
-      if (isLocalModified) {
-        map.set(p.id, p);
-      }
+      merged[matchingIdx] = {
+        ...existing,
+        ...lp,
+        durum: isPaid ? 'Odendi' : 'Bekliyor',
+        aktifPasif: isPassive ? 'Pasif' : 'Aktif'
+      };
+    } else {
+      merged.push(lp);
     }
   });
   
-  return Array.from(map.values());
+  return merged;
 }
 
 export default function App() {
