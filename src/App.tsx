@@ -33,6 +33,36 @@ import { Home, CalendarClock, Receipt, Percent, FileCode2, Wifi, BatteryMedium, 
 function mergeTransactions(localTxns: Transaction[], cloudTxns: Transaction[]): Transaction[] {
   const merged: Transaction[] = [];
   
+  const normalizeStr = (str: string) => {
+    return (str || '')
+      .toLowerCase()
+      .replace(/ö/g, 'o')
+      .replace(/ü/g, 'u')
+      .replace(/ş/g, 's')
+      .replace(/ı/g, 'i')
+      .replace(/ç/g, 'c')
+      .replace(/ğ/g, 'g')
+      .replace(/ödemesi/g, '')
+      .replace(/odemesi/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  };
+
+  const normalizeSubCat = (str: string) => {
+    const val = (str || '').toLowerCase().trim();
+    if (val === 'genel' || val === 'undefined' || val === 'null' || !val) {
+      return '';
+    }
+    return val
+      .replace(/ö/g, 'o')
+      .replace(/ü/g, 'u')
+      .replace(/ş/g, 's')
+      .replace(/ı/g, 'i')
+      .replace(/ç/g, 'c')
+      .replace(/ğ/g, 'g')
+      .replace(/[^a-z0-9]/g, '');
+  };
+
   // Helper to determine if two transactions represent the same physical action (deduplication)
   const isDuplicate = (t1: Transaction, t2: Transaction) => {
     if (t1.id === t2.id) return true;
@@ -40,12 +70,12 @@ function mergeTransactions(localTxns: Transaction[], cloudTxns: Transaction[]): 
     const sameDate = t1.tarih === t2.tarih;
     const sameType = t1.tur === t2.tur;
     const sameCat = t1.kategori === t2.kategori;
-    const sameSubCat = (t1.altKategori || '') === (t2.altKategori || '');
+    const sameSubCat = normalizeSubCat(t1.altKategori || '') === normalizeSubCat(t2.altKategori || '');
     const sameAmount = Math.abs(t1.tutar - t2.tutar) < 0.01;
     
-    const desc1 = (t1.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
-    const desc2 = (t2.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
-    const sameDesc = desc1 === desc2 || (desc1 !== '' && desc2 !== '' && (desc1.includes(desc2) || desc2.includes(desc1)));
+    const d1 = normalizeStr(t1.aciklama);
+    const d2 = normalizeStr(t2.aciklama);
+    const sameDesc = d1 === d2 || (d1 !== '' && d2 !== '' && (d1.includes(d2) || d2.includes(d1)));
     
     return sameDate && sameType && sameCat && sameSubCat && sameAmount && sameDesc;
   };

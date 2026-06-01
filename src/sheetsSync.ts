@@ -141,24 +141,37 @@ export async function syncSaveAllData(
   payments: RecurringPayment[],
   target?: 'transactions' | 'payments' | 'all'
 ): Promise<{ success: boolean; message?: string; error?: string }> {
+  const activeTarget = target || 'all';
   try {
-    const activeTarget = target || 'all';
-
-    // A single execution post is extremely fast, avoids Google Apps Script lock/concurrency errors,
-    // and is 100% backward & forward compatible with both older and newer Apps Script.
-    // We use useNoCors to guarantee Safari / mobile web browsers execute the sync without throwing network block errors.
+    // 1. Try with CORS first (useNoCors: false) to get real success/failure feedback from Google Sheets!
     const result = await callAppsScript(
       'saveAllData',
       { transactions, payments, target: activeTarget },
-      { method: 'POST', useNoCors: true }
+      { method: 'POST', useNoCors: false }
     );
     if (result && result.success) {
       setLastSyncTime(new Date().toLocaleString('tr-TR'));
       return { success: true, message: result.message || 'Veriler başarıyla eşitlendi.' };
     }
+    // If Google Sheets returns success: false, return the actual error!
     return { success: false, error: result?.error || 'Buluta kaydetme işlemi başarısız oldu.' };
-  } catch (e: any) {
-    return { success: false, error: e.toString() };
+  } catch (corsError: any) {
+    console.warn("CORS POST failed or was blocked, falling back to silent no-cors sync...", corsError);
+    // 2. Fallback to useNoCors: true for environments (like Safari/iOS Safari) where CORS redirects are blocked
+    try {
+      const result = await callAppsScript(
+        'saveAllData',
+        { transactions, payments, target: activeTarget },
+        { method: 'POST', useNoCors: true }
+      );
+      if (result && result.success) {
+        setLastSyncTime(new Date().toLocaleString('tr-TR'));
+        return { success: true, message: result.message || 'Veriler başarıyla eşitlendi.' };
+      }
+      return { success: false, error: result?.error || 'Buluta kaydetme işlemi başarısız oldu.' };
+    } catch (fallbackError: any) {
+      return { success: false, error: fallbackError.toString() };
+    }
   }
 }
 

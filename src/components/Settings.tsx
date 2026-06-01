@@ -179,6 +179,36 @@ export default function Settings({
 
   // Dynamically compile subcategories map
   const handleDeduplicateLocalData = () => {
+    const normalizeStr = (str: string) => {
+      return (str || '')
+        .toLowerCase()
+        .replace(/ö/g, 'o')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ı/g, 'i')
+        .replace(/ç/g, 'c')
+        .replace(/ğ/g, 'g')
+        .replace(/ödemesi/g, '')
+        .replace(/odemesi/g, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+    };
+
+    const normalizeSubCat = (str: string) => {
+      const val = (str || '').toLowerCase().trim();
+      if (val === 'genel' || val === 'undefined' || val === 'null' || !val) {
+        return '';
+      }
+      return val
+        .replace(/ö/g, 'o')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ı/g, 'i')
+        .replace(/ç/g, 'c')
+        .replace(/ğ/g, 'g')
+        .replace(/[^a-z0-9]/g, '');
+    };
+
     // 1. Deduplicate transactions
     const uniqueTxns: Transaction[] = [];
     let txDupsRemoved = 0;
@@ -190,11 +220,11 @@ export default function Settings({
         const sameTarih = ut.tarih === tx.tarih;
         const sameTur = ut.tur === tx.tur;
         const sameKategori = ut.kategori === tx.kategori;
-        const sameAltKategori = (ut.altKategori || '') === (tx.altKategori || '');
+        const sameAltKategori = normalizeSubCat(ut.altKategori || '') === normalizeSubCat(tx.altKategori || '');
         const sameTutar = Math.abs(ut.tutar - tx.tutar) < 0.01;
         
-        const d1 = (ut.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
-        const d2 = (tx.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
+        const d1 = normalizeStr(ut.aciklama);
+        const d2 = normalizeStr(tx.aciklama);
         const sameDesc = d1 === d2 || (d1 !== '' && d2 !== '' && (d1.includes(d2) || d2.includes(d1)));
 
         return sameTarih && sameTur && sameKategori && sameAltKategori && sameTutar && sameDesc;
