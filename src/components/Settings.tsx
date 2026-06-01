@@ -1161,7 +1161,11 @@ function handleRequest(e) {
             txSheet.getRange(startRow, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
             if (tutarCol !== -1) {
               // Tutar sütununu SAYI formatına zorlayarak tarihe dönüşmesini kesinlikle engelliyoruz!
-              txSheet.getRange(startRow, tutarCol + 1, txOutput2D.length, 1).setNumberFormat('0.00');
+              try {
+                txSheet.getRange(startRow, tutarCol + 1, txOutput2D.length, 1).setNumberFormat('0.00');
+              } catch (e) {
+                // E-Tablo sütun tipi belirlenmiş/kilitlenmişse sayı biçimlendirici hatasını yutuyoruz
+              }
             }
           }
 
@@ -1193,7 +1197,11 @@ function handleRequest(e) {
           if (txOutput2D.length > 0) {
             txSheet.getRange(2, 1, txOutput2D.length, txHeaders.length).setValues(txOutput2D);
             // Tutar sütununu (index 5, sütun 6) sayı formatına zorla
-            txSheet.getRange(2, 6, txOutput2D.length, 1).setNumberFormat('0.00');
+            try {
+              txSheet.getRange(2, 6, txOutput2D.length, 1).setNumberFormat('0.00');
+            } catch (e) {
+              // E-Tablo sütun tipi belirlenmiş/kilitlenmişse sayı biçimlendirici hatasını yutuyoruz
+            }
           }
         }
       }
@@ -1283,7 +1291,11 @@ function handleRequest(e) {
             paySheet.getRange(pStartRow, 1, payOutput2D.length, payHeaders.length).setValues(payOutput2D);
             if (pTutarCol !== -1) {
               // Tutar sütununu SAYI formatına zorlayarak tarihe dönüşmesini kesinlikle engelliyoruz!
-              paySheet.getRange(pStartRow, pTutarCol + 1, payOutput2D.length, 1).setNumberFormat('0.00');
+              try {
+                paySheet.getRange(pStartRow, pTutarCol + 1, payOutput2D.length, 1).setNumberFormat('0.00');
+              } catch (e) {
+                // E-Tablo sütun tipi belirlenmiş/kilitlenmişse sayı biçimlendirici hatasını yutuyoruz
+              }
             }
           }
 
@@ -1312,7 +1324,11 @@ function handleRequest(e) {
           if (payOutput2D.length > 0) {
             paySheet.getRange(2, 1, payOutput2D.length, payHeaders.length).setValues(payOutput2D);
             // Tutar sütununu sayı formatına zorla (Tutar 3. sıradadır: index 2)
-            paySheet.getRange(2, 3, payOutput2D.length, 1).setNumberFormat('0.00');
+            try {
+              paySheet.getRange(2, 3, payOutput2D.length, 1).setNumberFormat('0.00');
+            } catch (e) {
+              // E-Tablo sütun tipi belirlenmiş/kilitlenmişse sayı biçimlendirici hatasını yutuyoruz
+            }
           }
         }
       }
