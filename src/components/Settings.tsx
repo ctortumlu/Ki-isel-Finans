@@ -178,6 +178,65 @@ export default function Settings({
   }, [pdfDateFilteredTransactions, pdfTypeFilter]);
 
   // Dynamically compile subcategories map
+  const handleDeduplicateLocalData = () => {
+    // 1. Deduplicate transactions
+    const uniqueTxns: Transaction[] = [];
+    let txDupsRemoved = 0;
+
+    transactions.forEach(tx => {
+      const isDup = uniqueTxns.some(ut => {
+        if (ut.id === tx.id) return true;
+        
+        const sameTarih = ut.tarih === tx.tarih;
+        const sameTur = ut.tur === tx.tur;
+        const sameKategori = ut.kategori === tx.kategori;
+        const sameAltKategori = (ut.altKategori || '') === (tx.altKategori || '');
+        const sameTutar = Math.abs(ut.tutar - tx.tutar) < 0.01;
+        
+        const d1 = (ut.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
+        const d2 = (tx.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
+        const sameDesc = d1 === d2 || (d1 !== '' && d2 !== '' && (d1.includes(d2) || d2.includes(d1)));
+
+        return sameTarih && sameTur && sameKategori && sameAltKategori && sameTutar && sameDesc;
+      });
+
+      if (!isDup) {
+        uniqueTxns.push(tx);
+      } else {
+        txDupsRemoved++;
+      }
+    });
+
+    // 2. Deduplicate payments
+    const uniquePmts: RecurringPayment[] = [];
+    let pmtDupsRemoved = 0;
+
+    payments.forEach(pmt => {
+      const isDup = uniquePmts.some(up => {
+        if (up.id === pmt.id) return true;
+        const sameBaslik = up.baslik.trim().toLowerCase() === pmt.baslik.trim().toLowerCase();
+        const sameKate = up.kategori === pmt.kategori;
+        const sameTutar = Math.abs(up.tutar - pmt.tutar) < 0.01;
+        return sameBaslik && sameKate && sameTutar;
+      });
+
+      if (!isDup) {
+        uniquePmts.push(pmt);
+      } else {
+        pmtDupsRemoved++;
+      }
+    });
+
+    if (txDupsRemoved === 0 && pmtDupsRemoved === 0) {
+      alert("Yerel hafızanız zaten temiz! Mükerrer (çift kayıtlı) veri bulunamadı.");
+      return;
+    }
+
+    setTransactions(uniqueTxns);
+    setPayments(uniquePmts);
+
+    alert(`⚡ Eşitleme ve Veri Temizliği Başarılı!\n\nYerelde tekrarlayan ${txDupsRemoved} adet gelir-gider kaydı ve ${pmtDupsRemoved} adet mükerrer fatura/ödeme kaydı tam otomatik olarak ayıklandı.\n\nEğer Google E-Tablonuzu da güncellemek isterseniz, lütfen yukarıdaki "Yerel Verileri Buluta Yükle" butonuna tıklayarak buluttaki kopyaları da tek tıkla temizleyin!`);
+  };
   const pdfAvailableSubCategories = useMemo(() => {
     const subs = new Set<string>();
     pdfDateFilteredTransactions.forEach((t) => {
@@ -2994,6 +3053,14 @@ function handleRequest(e) {
             className="w-full py-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
           >
             <FileDown className="w-4 h-4 text-slate-500" /> Tüm Verileri Excel/CSV Olarak Yedekle
+          </button>
+
+          {/* Smart Automatic Optimizer / Deduplicator */}
+          <button
+            onClick={handleDeduplicateLocalData}
+            className="w-full py-3 bg-indigo-55 hover:bg-indigo-100 border border-indigo-200 text-indigo-750 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors active:scale-98"
+          >
+            <Sparkles className="w-4 h-4 text-indigo-600 animate-pulse" /> Mükerrer (Tekrarlayan) Kayıtları Ayıkla
           </button>
 
           {/* Backup Restore from CSV */}

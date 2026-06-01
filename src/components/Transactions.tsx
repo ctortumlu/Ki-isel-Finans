@@ -71,6 +71,7 @@ export default function Transactions({
 
   const filteredTransactions = useMemo(() => {
     const list = transactions.filter((t) => {
+      if (t.aktifPasif === 'Pasif') return false;
       const matchesSearch =
         t.aciklama.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.kategori.toLowerCase().includes(searchTerm.toLowerCase()) ||

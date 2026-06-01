@@ -239,12 +239,14 @@ export default function PaymentTracker({
   };
 
   // Sort: Pending payments sorted by due date ascending (closest first), followed by Paid payments
-  const sortedPayments = [...payments].sort((a, b) => {
-    if (a.durum !== b.durum) {
-      return a.durum === 'Bekliyor' ? -1 : 1;
-    }
-    return a.sonOdemeTarihi.localeCompare(b.sonOdemeTarihi);
-  });
+  const sortedPayments = payments
+    .filter((p) => p.aktifPasif !== 'Pasif')
+    .sort((a, b) => {
+      if (a.durum !== b.durum) {
+        return a.durum === 'Bekliyor' ? -1 : 1;
+      }
+      return a.sonOdemeTarihi.localeCompare(b.sonOdemeTarihi);
+    });
 
   const handleAddDraftItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -307,13 +309,13 @@ export default function PaymentTracker({
   // 3 KPIs calculation for Recurring Payments
   const overdueTotal = useMemo(() => {
     return payments
-      .filter((p) => p.durum === 'Bekliyor' && getDaysRemaining(p.sonOdemeTarihi) < 0)
+      .filter((p) => p.aktifPasif !== 'Pasif' && p.durum === 'Bekliyor' && getDaysRemaining(p.sonOdemeTarihi) < 0)
       .reduce((sum, p) => sum + p.tutar, 0);
   }, [payments]);
 
   const pendingTotal = useMemo(() => {
     return payments
-      .filter((p) => p.durum === 'Bekliyor' && getDaysRemaining(p.sonOdemeTarihi) >= 0)
+      .filter((p) => p.aktifPasif !== 'Pasif' && p.durum === 'Bekliyor' && getDaysRemaining(p.sonOdemeTarihi) >= 0)
       .reduce((sum, p) => sum + p.tutar, 0);
   }, [payments]);
 

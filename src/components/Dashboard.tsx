@@ -41,6 +41,7 @@ export default function Dashboard({
     }
 
     return transactions.filter((t) => {
+      if (t.aktifPasif === 'Pasif') return false;
       const tDate = new Date(t.tarih);
       return tDate >= startLimit && tDate <= endLimit;
     });
@@ -58,7 +59,7 @@ export default function Dashboard({
   const netBalance = totalIncome - totalExpense;
 
   // Pending / overdue / due today payments counts
-  const pendingPayments = payments.filter((p) => p.durum === 'Bekliyor');
+  const pendingPayments = payments.filter((p) => p.durum === 'Bekliyor' && p.aktifPasif !== 'Pasif');
   const overdueCount = pendingPayments.filter((p) => getDaysRemaining(p.sonOdemeTarihi) < 0).length;
   const dueTodayCount = pendingPayments.filter((p) => getDaysRemaining(p.sonOdemeTarihi) === 0).length;
   const d1to5Count = pendingPayments.filter((p) => {

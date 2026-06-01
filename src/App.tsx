@@ -45,7 +45,7 @@ function mergeTransactions(localTxns: Transaction[], cloudTxns: Transaction[]): 
     
     const desc1 = (t1.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
     const desc2 = (t2.aciklama || '').toLowerCase().replace(/ödemesi/g, '').replace(/odemesi/g, '').trim();
-    const sameDesc = desc1 === desc2 || desc1.includes(desc2) || desc2.includes(desc1);
+    const sameDesc = desc1 === desc2 || (desc1 !== '' && desc2 !== '' && (desc1.includes(desc2) || desc2.includes(desc1)));
     
     return sameDate && sameType && sameCat && sameSubCat && sameAmount && sameDesc;
   };
